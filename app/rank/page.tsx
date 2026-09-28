@@ -72,6 +72,18 @@ export default function RankPage() {
                   <p className="font-semibold">{solution.title}</p>
                   <p className="mt-1 text-sm leading-6 text-black/62">{solution.outcome}</p>
                   <p className="mt-1 text-xs text-black/48">{solution.valueAnchor}</p>
+                  {solution.products.length > 0 && (
+                    <ul className="mt-2 flex flex-wrap gap-1.5" aria-label={`Products for ${solution.title}`}>
+                      {solution.products.map((product) => (
+                        <li
+                          key={product}
+                          className="rounded-sm border border-black/15 bg-[#fafaf8] px-2 py-0.5 text-xs text-black/65"
+                        >
+                          {product}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 {!locked && canEditSession && (
                   <div className="flex gap-1">

@@ -1,6 +1,7 @@
 import type { Brand } from "./brands";
 import { ledgerAnnualTotal } from "./cost-model";
 import {
+  heartlandSolutions,
   initialSessionGraph,
   type HackathonBooking,
   patterns,
@@ -13,6 +14,7 @@ import {
   type Mechanic,
   type PartnerNote,
   type SessionGraph,
+  type SolutionCandidate,
 } from "./seed";
 import { calculateAnnualValue, calculateDailyValue, formatCurrency, formatPreciseCurrency } from "./value";
 
@@ -36,6 +38,23 @@ function matchedColdRole(role: string) {
 
 export function coldRoleMatch(role: string) {
   return matchedColdRole(role)?.role ?? null;
+}
+
+const seededSolutionsById = new Map(heartlandSolutions.map((solution) => [solution.id, solution]));
+
+/** Merge product chips from seed when older stored graphs omit them. */
+export function withSolutionProducts(solutions: SolutionCandidate[]): SolutionCandidate[] {
+  return solutions.map((solution) => {
+    const seeded = seededSolutionsById.get(solution.id);
+    const products = solution.products?.length ? solution.products : seeded?.products ?? [];
+    return {
+      ...solution,
+      title: solution.title || seeded?.title || solution.id,
+      outcome: solution.outcome || seeded?.outcome || "",
+      valueAnchor: solution.valueAnchor || seeded?.valueAnchor || "",
+      products,
+    };
+  });
 }
 
 export const coldScopeDefaults: { company: ColdCompany; attendees: ColdAttendee[] } = {
@@ -142,7 +161,9 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
     coldCompany: value.coldCompany ?? null,
     coldAttendees: value.coldAttendees ?? [],
     outcome,
-    solutions: value.solutions?.length ? value.solutions : initialSessionGraph.solutions,
+    solutions: withSolutionProducts(
+      value.solutions?.length ? value.solutions : initialSessionGraph.solutions,
+    ),
     ranking: value.ranking?.order?.length
       ? { order: value.ranking.order, locked: Boolean(value.ranking.locked) }
       : initialSessionGraph.ranking,
@@ -165,6 +186,9 @@ export function applyColdScope(
 ): SessionGraph {
   const enteringCold = graph.session.scopeMode !== "cold";
   const sessionId = "cold-session";
+  const solutions = withSolutionProducts(
+    graph.solutions.length ? graph.solutions : initialSessionGraph.solutions,
+  );
   return {
     ...graph,
     session: {
@@ -214,9 +238,9 @@ export function applyColdScope(
         attendance: "attending",
       };
     }),
-    solutions: graph.solutions.length ? graph.solutions : initialSessionGraph.solutions,
+    solutions,
     ranking: enteringCold
-      ? { order: (graph.solutions.length ? graph.solutions : initialSessionGraph.solutions).map((s) => s.id), locked: false }
+      ? { order: solutions.map((s) => s.id), locked: false }
       : graph.ranking,
     hackathon: enteringCold ? null : graph.hackathon,
   };
@@ -685,7 +709,7 @@ export function fundingAskCopy(graph: SessionGraph) {
 }
 
 export function rankedSolutions(graph: SessionGraph) {
-  const byId = new Map(graph.solutions.map((solution) => [solution.id, solution]));
+  const byId = new Map(withSolutionProducts(graph.solutions).map((solution) => [solution.id, solution]));
   return graph.ranking.order
     .map((id) => byId.get(id))
     .filter((solution): solution is NonNullable<typeof solution> => Boolean(solution));
@@ -693,7 +717,10 @@ export function rankedSolutions(graph: SessionGraph) {
 
 export function winningSolution(graph: SessionGraph) {
   if (!graph.ranking.locked || graph.ranking.order.length === 0) return null;
-  return graph.solutions.find((solution) => solution.id === graph.ranking.order[0]) ?? null;
+  const winner = withSolutionProducts(graph.solutions).find(
+    (solution) => solution.id === graph.ranking.order[0],
+  );
+  return winner ?? null;
 }
 
 export function reorderSolutions(graph: SessionGraph, order: string[]): SessionGraph {

@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Lightbulb, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Lightbulb, Pencil, Plus } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { GhostLedgerPanel } from "@/components/ghost-ledger-panel";
@@ -18,6 +18,10 @@ export default function RunPage() {
   const { graph, brand, addCapture, updateCapture, saveSessionOutcome, setActiveStep, canEditSession, viewer } = useSession();
   const agenda = agendaForSession(graph);
   const activeStep = agenda.find((step) => step.state === "active") ?? agenda[2];
+  const activeIndex = Math.max(0, agenda.findIndex((step) => step.id === activeStep.id));
+  const prevStep = activeIndex > 0 ? agenda[activeIndex - 1] : null;
+  const nextStep = activeIndex < agenda.length - 1 ? agenda[activeIndex + 1] : null;
+  const isLastStep = !nextStep;
   const capturePeople = graph.attendees.map((attendee) => attendee.name);
   const [captureText, setCaptureText] = useState("");
   const [person, setPerson] = useState(capturePeople[0] ?? "Participant");
@@ -86,15 +90,26 @@ export default function RunPage() {
           <div className="mx-auto max-w-5xl">
             <div className="flex flex-col items-start gap-4 sm:flex-row sm:justify-between">
               <div className="min-w-0 flex-1">
-                <p className="mb-2 text-sm font-medium text-black/45">{activeStep.title} · {activeStep.durationMinutes} min</p>
+                <p className="mb-2 text-sm font-medium text-black/45">
+                  Step {activeStep.order} of {agenda.length} · {activeStep.title} · {activeStep.durationMinutes} min
+                </p>
                 <h2 className="max-w-4xl text-2xl font-semibold leading-tight tracking-tight md:text-3xl">{activeStep.prompt}</h2>
                 {activeStep.subPrompt && (
                   <p className="mt-2 text-sm text-black/55">{activeStep.subPrompt}</p>
                 )}
               </div>
-              <Link href="/rank" className={buttonVariants({ className: "bg-[var(--brand-accent)] text-white hover:bg-[var(--brand-accent-dark)]" })}>
-                Rank solutions <ArrowRight />
-              </Link>
+              <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+                <AgendaStepPrimary
+                  nextStep={nextStep}
+                  isLastStep={isLastStep}
+                  onContinue={(stepId) => setActiveStep(stepId)}
+                />
+                {!isLastStep && (
+                  <Link href="/rank" className="text-center text-sm text-black/55 underline-offset-4 hover:underline sm:text-right">
+                    Skip to rank
+                  </Link>
+                )}
+              </div>
             </div>
             {!selfService && (
               <div className="mt-4 max-w-4xl">
@@ -119,6 +134,15 @@ export default function RunPage() {
             )}
 
             {graph.session.mechanic === "ghost-ledger" ? <GhostLedgerPanel /> : <ValueSprintPanel />}
+
+            <AgendaStepNav
+              className="mt-5"
+              prevStep={prevStep}
+              nextStep={nextStep}
+              isLastStep={isLastStep}
+              onBack={(stepId) => setActiveStep(stepId)}
+              onContinue={(stepId) => setActiveStep(stepId)}
+            />
 
             <div className="mt-7">
               <div className="mb-3 flex items-end justify-between">
@@ -171,10 +195,101 @@ export default function RunPage() {
                 onSave={saveSessionOutcome}
               />
             )}
+
+            <div className="h-20" aria-hidden />
           </div>
         </section>
       </div>
+
+      <div className="sticky bottom-0 z-20 border-t border-black/10 bg-white/95 px-5 py-3 backdrop-blur lg:px-8">
+        <div className="mx-auto max-w-5xl md:pl-[180px]">
+          <AgendaStepNav
+            prevStep={prevStep}
+            nextStep={nextStep}
+            isLastStep={isLastStep}
+            onBack={(stepId) => setActiveStep(stepId)}
+            onContinue={(stepId) => setActiveStep(stepId)}
+          />
+        </div>
+      </div>
     </div>
+  );
+}
+
+function AgendaStepPrimary({
+  nextStep,
+  isLastStep,
+  onContinue,
+}: {
+  nextStep: { id: string; title: string } | null;
+  isLastStep: boolean;
+  onContinue: (stepId: string) => void;
+}) {
+  if (isLastStep || !nextStep) {
+    return (
+      <Link
+        href="/rank"
+        className={buttonVariants({ className: "bg-[var(--brand-accent)] text-white hover:bg-[var(--brand-accent-dark)]" })}
+      >
+        Rank solutions <ArrowRight />
+      </Link>
+    );
+  }
+  return (
+    <Button
+      type="button"
+      className="bg-[var(--brand-accent)] text-white hover:bg-[var(--brand-accent-dark)]"
+      onClick={() => onContinue(nextStep.id)}
+    >
+      Continue to {nextStep.title} <ArrowRight />
+    </Button>
+  );
+}
+
+function AgendaStepNav({
+  prevStep,
+  nextStep,
+  isLastStep,
+  onBack,
+  onContinue,
+  className,
+}: {
+  prevStep: { id: string; title: string } | null;
+  nextStep: { id: string; title: string } | null;
+  isLastStep: boolean;
+  onBack: (stepId: string) => void;
+  onContinue: (stepId: string) => void;
+  className?: string;
+}) {
+  return (
+    <nav
+      aria-label="Agenda step"
+      className={cn("flex flex-wrap items-center justify-between gap-3", className)}
+    >
+      {prevStep ? (
+        <Button type="button" variant="outline" onClick={() => onBack(prevStep.id)}>
+          <ArrowLeft /> Back to {prevStep.title}
+        </Button>
+      ) : (
+        <span />
+      )}
+      {isLastStep || !nextStep ? (
+        <Link
+          href="/rank"
+          className={buttonVariants({ className: "bg-[var(--brand-accent)] text-white hover:bg-[var(--brand-accent-dark)]" })}
+        >
+          Rank solutions <ArrowRight />
+        </Link>
+      ) : (
+        <Button
+          type="button"
+          className="bg-[var(--brand-accent)] text-white hover:bg-[var(--brand-accent-dark)]"
+          onClick={() => onContinue(nextStep.id)}
+        >
+          Continue to {nextStep.title} <ArrowRight />
+        </Button>
+      )}
+    </nav>
   );
 }
 

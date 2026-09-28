@@ -29,6 +29,8 @@ describe("Rank page", () => {
     const markup = renderToStaticMarkup(<RankPage />);
     expect(markup).toContain("Rank solutions");
     expect(markup).toContain("AI-assisted claims intake extraction");
+    expect(markup).toContain("Document AI");
+    expect(markup).toContain("Vertex AI Search");
     expect(markup).toContain("Lock rank 1");
     expect(markup).not.toContain("Book hackathon");
   });

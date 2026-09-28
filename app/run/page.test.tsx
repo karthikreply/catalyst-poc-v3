@@ -193,3 +193,61 @@ describe("board-slide close", () => {
     expect(screen.getByText("Capture the answer verbatim. Their words, not a summary.")).toBeInTheDocument();
   });
 });
+
+describe("agenda step navigation", () => {
+  function mockAgendaAt(stepId: string, setActiveStep = vi.fn()) {
+    useSessionMock.mockReturnValue({
+      graph: {
+        ...initialSessionGraph,
+        agenda: initialSessionGraph.agenda.map((step) => ({
+          ...step,
+          state: step.id === stepId ? "active" : step.order < (initialSessionGraph.agenda.find((item) => item.id === stepId)?.order ?? 1) ? "done" : "upcoming",
+        })),
+      },
+      brand: { partnerName: "CDW" },
+      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      canEditSession: true,
+      addCapture: vi.fn(),
+      updateCapture: vi.fn(),
+      saveSessionOutcome: vi.fn(),
+      setActiveStep,
+      updateValue: vi.fn(),
+      updateValueConfirmer: vi.fn(),
+      updateCostInput: vi.fn(),
+      freezeLedgerNow: vi.fn(),
+    });
+    return setActiveStep;
+  }
+
+  it("continues to the next agenda step from the main panel", () => {
+    const setActiveStep = mockAgendaAt("constraints");
+    render(<RunPage />);
+
+    expect(screen.getByRole("link", { name: "Skip to rank" })).toHaveAttribute("href", "/rank");
+    expect(screen.getByText(/Step 3 of 5/)).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: /Continue to Shape the pilot/i })[0]);
+
+    expect(setActiveStep).toHaveBeenCalledWith("shape-the-pilot");
+  });
+
+  it("goes back to the previous agenda step", () => {
+    const setActiveStep = mockAgendaAt("constraints");
+    render(<RunPage />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: /Back to Volume and cost/i })[0]);
+
+    expect(setActiveStep).toHaveBeenCalledWith("volume-and-cost");
+  });
+
+  it("offers Rank solutions on the last step instead of Continue", () => {
+    mockAgendaAt("owner-and-ask");
+    render(<RunPage />);
+
+    expect(screen.queryByRole("link", { name: "Skip to rank" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Continue to/i })).not.toBeInTheDocument();
+    const rankLinks = screen.getAllByRole("link", { name: /Rank solutions/i });
+    expect(rankLinks.length).toBeGreaterThan(0);
+    expect(rankLinks[0]).toHaveAttribute("href", "/rank");
+    expect(screen.getAllByRole("button", { name: /Back to Shape the pilot/i }).length).toBeGreaterThan(0);
+  });
+});

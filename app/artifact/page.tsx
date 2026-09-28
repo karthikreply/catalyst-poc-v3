@@ -278,6 +278,18 @@ export default function ArtifactPage() {
               <p className="mt-3 text-xl font-semibold">{winner.title}</p>
               <p className="mt-2 text-sm leading-6 text-black/62">{winner.outcome}</p>
               <p className="mt-1 text-xs text-black/48">{winner.valueAnchor}</p>
+              {winner.products.length > 0 && (
+                <ul className="mt-2 flex flex-wrap gap-1.5" aria-label={`Products for ${winner.title}`}>
+                  {winner.products.map((product) => (
+                    <li
+                      key={product}
+                      className="rounded-sm border border-black/15 bg-[#fafaf8] px-2 py-0.5 text-xs text-black/65"
+                    >
+                      {product}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
           )}
 

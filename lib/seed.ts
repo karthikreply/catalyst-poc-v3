@@ -10,6 +10,8 @@ export type SolutionCandidate = {
   title: string;
   outcome: string;
   valueAnchor: string;
+  /** Gemini / Google Cloud products the solution uses in the demo. */
+  products: string[];
 };
 
 export type RankingState = {
@@ -190,42 +192,49 @@ export const heartlandSolutions: SolutionCandidate[] = [
     title: "AI-assisted claims intake extraction",
     outcome: "Pre-fill claim fields from PDFs so supervisors stop retyping every form.",
     valueAnchor: "$7.75M annual handling-cost opportunity at 400 claims/day",
+    products: ["Gemini", "Document AI"],
   },
   {
     id: "sol-low-confidence-review",
     title: "Low-confidence human review routing",
     outcome: "Send only uncertain extractions to Michelle's team; keep the rest moving.",
     valueAnchor: "Protects the 15% Michelle flagged as the hard cases",
+    products: ["Gemini", "Vertex AI"],
   },
   {
     id: "sol-handwriting-assist",
     title: "Handwritten adjuster-note assist",
     outcome: "Surface margin notes that today's OCR drops so intake does not stall.",
     valueAnchor: "Closes the handwritten-notes gap named in the session",
+    products: ["Gemini", "Document AI"],
   },
   {
     id: "sol-audit-trail",
     title: "Assisted-decision audit trail",
     outcome: "Every automated assist leaves an evidence path compliance can review.",
     valueAnchor: "Unblocks Robert's audit-trail constraint on assisted extraction",
+    products: ["Gemini", "Cloud Logging"],
   },
   {
     id: "sol-overtime-reduction",
     title: "Intake overtime reduction",
     outcome: "Cut the overtime Heartland paid instead of hiring through Q1 volume.",
     valueAnchor: "$48k/month overtime named by Dana",
+    products: ["Gemini", "Document AI"],
   },
   {
     id: "sol-rework-leakage",
     title: "Rework and reopen leakage cut",
     outcome: "Fewer reopened claims from incomplete first-pass extraction.",
     valueAnchor: "6% reopen rate × $210 each in the cost model",
+    products: ["Gemini", "Vertex AI"],
   },
   {
     id: "sol-status-summary",
     title: "Claim-status summarisation for the floor",
     outcome: "Give supervisors a one-screen status pull instead of chasing PDFs.",
     valueAnchor: "340 review hours/week at $61 loaded rate",
+    products: ["Gemini", "Vertex AI Search"],
   },
 ];
 
