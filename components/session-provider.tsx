@@ -26,12 +26,16 @@ import {
   applyPatternChoice,
   applyReusePriorPilotSpec,
   bindAnnualValue,
+  bookHackathon as bookHackathonInGraph,
   graphForActor,
   hydrateSessionGraph,
   isSessionReadOnly,
+  lockRanking as lockRankingInGraph,
+  moveSolution as moveSolutionInGraph,
   restoreSeededGraph,
   savePartnerNote as savePartnerNoteInGraph,
   saveSessionOutcome as saveSessionOutcomeInGraph,
+  unlockRanking as unlockRankingInGraph,
   updateCapture as updateCaptureInGraph,
   updateValueConfirmer as updateValueConfirmerInGraph,
   viewerForActor,
@@ -39,6 +43,7 @@ import {
   type FundingRoute,
   type Viewer,
 } from "@/lib/session";
+import type { HackathonBooking } from "@/lib/seed";
 
 type SessionContextValue = {
   graph: SessionGraph;
@@ -67,19 +72,25 @@ type SessionContextValue = {
   setColdScope: (company: ColdCompany, attendees: ColdAttendee[]) => void;
   restoreSeededScope: () => void;
   savePartnerNote: (noteId: string | null, text: string) => void;
+  moveSolution: (solutionId: string, direction: "up" | "down") => void;
+  lockRanking: () => void;
+  unlockRanking: () => void;
+  bookHackathon: (draft: Omit<HackathonBooking, "booked">) => void;
   canEditSession: boolean;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
-const GRAPH_KEY = "catalyst-session-graph-v3";
+const GRAPH_KEY = "catalyst-session-graph-v4";
 const BRAND_KEY = "catalyst-brand";
 const ACTOR_KEY = "catalyst-viewer-actor";
-const SEEDED_GRAPH_KEY = "catalyst-seeded-graph-v3";
+const SEEDED_GRAPH_KEY = "catalyst-seeded-graph-v4";
 const SUPERSEDED_KEYS = [
   "catalyst-session-graph",
   "catalyst-seeded-graph",
   "catalyst-session-graph-v2",
   "catalyst-seeded-graph-v2",
+  "catalyst-session-graph-v3",
+  "catalyst-seeded-graph-v3",
 ];
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -297,6 +308,26 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }));
   }
 
+  function moveSolution(solutionId: string, direction: "up" | "down") {
+    if (!canEditSession) return;
+    setGraph((current) => moveSolutionInGraph(current, solutionId, direction));
+  }
+
+  function lockRanking() {
+    if (!canEditSession) return;
+    setGraph((current) => lockRankingInGraph(current));
+  }
+
+  function unlockRanking() {
+    if (!canEditSession) return;
+    setGraph((current) => unlockRankingInGraph(current));
+  }
+
+  function bookHackathon(draft: Omit<HackathonBooking, "booked">) {
+    if (!canEditSession) return;
+    setGraph((current) => bookHackathonInGraph(current, draft));
+  }
+
   const value = {
     graph,
     brandId,
@@ -324,6 +355,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setColdScope,
     restoreSeededScope,
     savePartnerNote,
+    moveSolution,
+    lockRanking,
+    unlockRanking,
+    bookHackathon,
     canEditSession,
   };
 

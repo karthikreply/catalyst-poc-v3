@@ -22,6 +22,7 @@ import {
   customerSponsor,
   fundingAskCopy,
   hasCompleteCostComponents,
+  winningSolution,
 } from "@/lib/session";
 
 function componentArithmetic(component: CostComponent) {
@@ -75,6 +76,8 @@ export default function ArtifactPage() {
   const sponsor = customerSponsor(graph);
 
   const actions = artifactActions(viewer.actor, qualified, graph.session.delivery);
+  const limits = artifactLimitsCopy(graph);
+  const winner = winningSolution(graph);
 
   async function downloadPdf() {
     const artifact = document.getElementById("business-case");
@@ -135,7 +138,7 @@ export default function ArtifactPage() {
                 <UnavailableControl
                   label={actions.secondary}
                   owner={brand.partnerName}
-                  explanation={qualified ? "A qualified self-service case can request a facilitated follow-up; this demo does not book it." : "Scheduling the next operational step lives with the partner, not this screen."}
+                  explanation="A qualified self-service case can request a facilitated follow-up; this demo does not book it."
                 />
               )}
             </>
@@ -151,6 +154,22 @@ export default function ArtifactPage() {
             Open pilot spec <ArrowRight />
           </Link>
         </div>
+        {graph.hackathon?.booked ? (
+          <div className="mx-auto mt-3 max-w-4xl rounded-sm border border-black/10 bg-[#fafaf8] px-4 py-3 text-sm text-black/70" role="status">
+            <p className="font-semibold text-black/80">Hackathon confirmed · {graph.hackathon.date}</p>
+            <p className="mt-1 leading-6">
+              {winner?.title ?? "Rank 1"} · {graph.hackathon.googleFacilitator} (Google) · {graph.hackathon.partnerSpecialist} (partner) · {graph.hackathon.customerOwner} (customer)
+            </p>
+            <p className="mt-1 text-xs text-black/48">{graph.hackathon.question}</p>
+          </div>
+        ) : !selfService && viewer.actor === "partner" ? (
+          <div className="mx-auto mt-3 flex max-w-4xl flex-wrap items-center justify-between gap-3 rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+            <p>No hackathon booked yet. Rank the shortlist and put a date on the calendar before funding.</p>
+            <Link href="/rank" className={buttonVariants({ size: "sm", className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>
+              Rank and book <ArrowRight />
+            </Link>
+          </div>
+        ) : null}
       </div>
 
       <article id="business-case" className="mx-auto mt-5 max-w-4xl rounded-sm border border-black/10 bg-white">
@@ -245,20 +264,49 @@ export default function ArtifactPage() {
           </section>
 
           <section>
-            <h3 className="text-lg font-semibold">{artifactLimitsCopy.heading}</h3>
+            <h3 className="text-lg font-semibold">{limits.heading}</h3>
             <p className="mt-3 max-w-2xl text-[15px] leading-7 text-black/70">
               {graph.session.scopeMode === "cold"
-                ? `Accuracy on ${graph.session.customerName}'s own data, actual review time, and production integration remain unproven. The pilot exists to answer these.`
-                : artifactLimitsCopy.body}
+                ? `Accuracy on ${graph.session.customerName}'s own data, actual review time, and production integration remain unproven. The three-day hackathon exists to answer these and to scope the six-week pilot.`
+                : limits.body}
             </p>
           </section>
 
+          {winner && (
+            <section>
+              <h3 className="text-lg font-semibold">The ranked solution</h3>
+              <p className="mt-3 text-xl font-semibold">{winner.title}</p>
+              <p className="mt-2 text-sm leading-6 text-black/62">{winner.outcome}</p>
+              <p className="mt-1 text-xs text-black/48">{winner.valueAnchor}</p>
+            </section>
+          )}
+
           <section>
-            <h3 className="text-lg font-semibold">The proposed pilot</h3>
+            <h3 className="text-lg font-semibold">The booked hackathon</h3>
+            {graph.hackathon?.booked ? (
+              <dl className="mt-4 grid gap-px overflow-hidden rounded-sm border border-black/10 bg-black/10 sm:grid-cols-2">
+                {[
+                  ["Date", graph.hackathon.date],
+                  ["Winning solution", winner?.title ?? "Rank 1"],
+                  ["Google facilitator", graph.hackathon.googleFacilitator],
+                  ["Partner specialist", graph.hackathon.partnerSpecialist],
+                  ["Customer owner", graph.hackathon.customerOwner],
+                  ["Question to answer", graph.hackathon.question],
+                ].map(([term, detail]) => (
+                  <div key={term} className="bg-white p-4"><dt className="text-xs font-medium text-black/45">{term}</dt><dd className="mt-1 text-sm leading-6">{detail}</dd></div>
+                ))}
+              </dl>
+            ) : (
+              <p className="mt-3 text-sm text-black/55">No hackathon booked yet. Rank solutions and book a date before treating this as a leave-behind.</p>
+            )}
+          </section>
+
+          <section>
+            <h3 className="text-lg font-semibold">What the hackathon will scope</h3>
             <dl className="mt-4 grid gap-px overflow-hidden rounded-sm border border-black/10 bg-black/10 sm:grid-cols-2">
               {[
-                ["Scope", artifactPilotScopeCopy(graph, brand)],
-                ["Duration", "Six weeks"],
+                ["Pilot scope", artifactPilotScopeCopy(graph, brand)],
+                ["Pilot duration", "Six weeks"],
                 ["Owner", graph.outcome.owner ?? "Not confirmed"],
                 ["Success", "Process 500 anonymised claims with an audit trail and human review for low-confidence fields"],
               ].map(([term, detail]) => (

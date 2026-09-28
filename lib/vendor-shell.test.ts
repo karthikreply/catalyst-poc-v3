@@ -35,6 +35,8 @@ describe("vendor shell routing", () => {
   it("produces vendor breadcrumbs for dashboard, flow, funding, and telemetry", () => {
     expect(breadcrumbForPath("/")).toEqual(["Partner network", "Dashboard"]);
     expect(breadcrumbForPath("/plan")).toEqual(["Partner network", "Value sessions", "Plan"]);
+    expect(breadcrumbForPath("/rank")).toEqual(["Partner network", "Value sessions", "Rank"]);
+    expect(isBrandFlowPath("/rank", "partner")).toBe(true);
     expect(breadcrumbForPath("/funding")).toEqual(["Partner network", "Funding"]);
     expect(breadcrumbForPath("/telemetry")).toEqual(["Partner network", "Telemetry"]);
   });

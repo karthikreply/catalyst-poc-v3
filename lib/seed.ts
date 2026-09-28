@@ -1,9 +1,30 @@
 export type Actor = "pdm" | "partner" | "cpm";
-export type Delivery = "facilitated" | "self-service";
+export type Delivery = "facilitated" | "google-facilitated" | "self-service";
 export type Mechanic = "value-sprint" | "ghost-ledger";
 export type CloseStyle = "owner-and-ask" | "board-slide";
 export type FieldSource = "partner-portal" | "crm" | "typed" | "inferred";
 export type ScopeMode = "seeded" | "cold";
+
+export type SolutionCandidate = {
+  id: string;
+  title: string;
+  outcome: string;
+  valueAnchor: string;
+};
+
+export type RankingState = {
+  order: string[];
+  locked: boolean;
+};
+
+export type HackathonBooking = {
+  date: string;
+  googleFacilitator: string;
+  partnerSpecialist: string;
+  customerOwner: string;
+  question: string;
+  booked: boolean;
+};
 
 export type ColdCompany = {
   name: string;
@@ -113,6 +134,9 @@ export type SessionGraph = {
   attendees: Attendee[];
   coldCompany: ColdCompany | null;
   coldAttendees: ColdAttendee[];
+  solutions: SolutionCandidate[];
+  ranking: RankingState;
+  hackathon: HackathonBooking | null;
 };
 
 export const patterns = [
@@ -159,6 +183,51 @@ export const patterns = [
 ] as const;
 
 const sessionId = "heartland-2026-09";
+
+export const heartlandSolutions: SolutionCandidate[] = [
+  {
+    id: "sol-intake-extraction",
+    title: "AI-assisted claims intake extraction",
+    outcome: "Pre-fill claim fields from PDFs so supervisors stop retyping every form.",
+    valueAnchor: "$7.75M annual handling-cost opportunity at 400 claims/day",
+  },
+  {
+    id: "sol-low-confidence-review",
+    title: "Low-confidence human review routing",
+    outcome: "Send only uncertain extractions to Michelle's team; keep the rest moving.",
+    valueAnchor: "Protects the 15% Michelle flagged as the hard cases",
+  },
+  {
+    id: "sol-handwriting-assist",
+    title: "Handwritten adjuster-note assist",
+    outcome: "Surface margin notes that today's OCR drops so intake does not stall.",
+    valueAnchor: "Closes the handwritten-notes gap named in the session",
+  },
+  {
+    id: "sol-audit-trail",
+    title: "Assisted-decision audit trail",
+    outcome: "Every automated assist leaves an evidence path compliance can review.",
+    valueAnchor: "Unblocks Robert's audit-trail constraint on assisted extraction",
+  },
+  {
+    id: "sol-overtime-reduction",
+    title: "Intake overtime reduction",
+    outcome: "Cut the overtime Heartland paid instead of hiring through Q1 volume.",
+    valueAnchor: "$48k/month overtime named by Dana",
+  },
+  {
+    id: "sol-rework-leakage",
+    title: "Rework and reopen leakage cut",
+    outcome: "Fewer reopened claims from incomplete first-pass extraction.",
+    valueAnchor: "6% reopen rate × $210 each in the cost model",
+  },
+  {
+    id: "sol-status-summary",
+    title: "Claim-status summarisation for the floor",
+    outcome: "Give supervisors a one-screen status pull instead of chasing PDFs.",
+    valueAnchor: "340 review hours/week at $61 loaded rate",
+  },
+];
 
 export const initialSessionGraph: SessionGraph = {
   session: {
@@ -261,9 +330,15 @@ export const initialSessionGraph: SessionGraph = {
     useCase: "AI-assisted claims intake extraction",
     annualValue: 7_750_000,
     owner: "Alex Chen",
-    nextStep: "6-week pilot on 500 anonymised claims",
+    nextStep: "3-day hackathon to scope a six-week pilot",
     constraint: "Human review on low-confidence extractions",
   },
+  solutions: heartlandSolutions,
+  ranking: {
+    order: heartlandSolutions.map((solution) => solution.id),
+    locked: false,
+  },
+  hackathon: null,
   attendees: [
     { id: "dana", name: "Dana Reyes", role: "VP Claims Operations", reason: "Owns the operating outcome and can sponsor the pilot.", source: "crm", attendance: "attending" },
     { id: "michelle", name: "Michelle Dorsey", role: "Claims Supervisor", reason: "Brings the frontline workflow and handling-cost evidence.", source: "crm", attendance: "attending" },

@@ -66,9 +66,9 @@ describe("telemetryBenchmarks", () => {
     expect(rows).toHaveLength(63);
     expect(summary.sessionsRun).toBe(51);
     expect(summary.fundingClaimsSubmitted).toBe(34);
-    expect(summary.pilotsFunded).toBe(28);
+    expect(summary.hackathonsBooked).toBe(28);
     expect(summary.sessionsRun).toBeLessThan(rows.length);
-    expect(summary.pilotsFunded).toBeLessThan(summary.fundingClaimsSubmitted);
+    expect(summary.hackathonsBooked).toBeLessThan(summary.fundingClaimsSubmitted);
   });
 
   it("varies partner patterns, mechanics, delivery, outcomes, and quarters", () => {

@@ -1,8 +1,8 @@
 import type { Actor, CloseStyle } from "./seed";
 
-export type TelemetryOutcome = "Scoped" | "Run" | "Pilot proposed" | "Pilot funded";
+export type TelemetryOutcome = "Scoped" | "Run" | "Hackathon proposed" | "Hackathon booked";
 export type TelemetryPartner = "CDW" | "SoftwareOne" | "Insight" | "SHI";
-export type TelemetryDelivery = "facilitated" | "self-service";
+export type TelemetryDelivery = "facilitated" | "google-facilitated" | "self-service";
 export type TelemetryMechanic = "value-sprint" | "ghost-ledger";
 
 export type TelemetrySession = {
@@ -67,7 +67,7 @@ function row(
   qualified: boolean,
   mechanic: TelemetryMechanic,
 ): TelemetrySession {
-  const outcome: TelemetryOutcome = converted ? "Pilot funded" : qualified ? "Pilot proposed" : "Run";
+  const outcome: TelemetryOutcome = converted ? "Hackathon booked" : qualified ? "Hackathon proposed" : "Run";
   const partnerIndex = index % partners.length;
   const partnerSequence = Math.floor(index / partners.length);
   return {
@@ -120,7 +120,7 @@ export function buildTelemetrySessions(): TelemetrySession[] {
   const cdwSubmitted = rows
     .flatMap((item, index) => (
       item.partner === "CDW" &&
-      item.outcome === "Pilot proposed" &&
+      item.outcome === "Hackathon proposed" &&
       !item.converted
         ? [index]
         : []
@@ -136,9 +136,9 @@ export function summarizeTelemetry(rows: TelemetrySession[]) {
   return {
     sessionsScoped: rows.length,
     sessionsRun: rows.filter((item) => item.outcome !== "Scoped").length,
-    pilotsProposed: rows.filter((item) => item.outcome === "Pilot proposed" || item.outcome === "Pilot funded").length,
+    hackathonsProposed: rows.filter((item) => item.outcome === "Hackathon proposed" || item.outcome === "Hackathon booked").length,
     fundingClaimsSubmitted: rows.filter((item) => item.fundingClaimSubmitted).length,
-    pilotsFunded: rows.filter((item) => item.outcome === "Pilot funded").length,
+    hackathonsBooked: rows.filter((item) => item.outcome === "Hackathon booked").length,
     fundedPipelineValue: rows.reduce((sum, item) => sum + item.fundedValue, 0),
   };
 }

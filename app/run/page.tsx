@@ -92,8 +92,8 @@ export default function RunPage() {
                   <p className="mt-2 text-sm text-black/55">{activeStep.subPrompt}</p>
                 )}
               </div>
-              <Link href="/artifact" className={buttonVariants({ className: "bg-[var(--brand-accent)] text-white hover:bg-[var(--brand-accent-dark)]" })}>
-                Generate business case <ArrowRight />
+              <Link href="/rank" className={buttonVariants({ className: "bg-[var(--brand-accent)] text-white hover:bg-[var(--brand-accent-dark)]" })}>
+                Rank solutions <ArrowRight />
               </Link>
             </div>
             {!selfService && (

@@ -144,7 +144,7 @@ function VendorFundingReview({ data }: { data: ReturnType<typeof useFundingData>
               ["Use case", graph.outcome.useCase || "Not captured"],
               ["Value", value],
               ["Format", ghost ? "Ghost ledger" : "Value sprint"],
-              ["Who ran it", graph.session.delivery === "self-service" ? "Self-service · unverified estimate" : "Facilitated"],
+              ["Who ran it", graph.session.delivery === "self-service" ? "Customer-run · uncommon · unverified estimate" : graph.session.delivery === "google-facilitated" ? "Google-facilitated" : "Partner-facilitated"],
             ].map(([term, detail]) => (
               <div key={term} className="bg-[var(--md-sys-color-surface)] p-5">
                 <dt className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">{term}</dt>

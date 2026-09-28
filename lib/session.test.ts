@@ -16,6 +16,11 @@ import {
   artifactHeadline,
   artifactLimitsCopy,
   artifactPilotScopeCopy,
+  bookHackathon,
+  lockRanking,
+  moveSolution,
+  unlockRanking,
+  winningSolution,
   canFlagReferenceStory,
   canViewPartnerScope,
   claimsArtifactCopy,
@@ -404,11 +409,12 @@ describe("scope decisions", () => {
   });
 
   it("names the case's unproven limits so the pilot is the next step", () => {
-    expect(artifactLimitsCopy.heading).toBe("What this case does not yet prove");
-    expect(artifactLimitsCopy.body).toMatch(/handwritten adjuster notes/i);
-    expect(artifactLimitsCopy.body).toMatch(/15%/);
-    expect(artifactLimitsCopy.body).toMatch(/review time/i);
-    expect(artifactLimitsCopy.body).toMatch(/pilot exists to answer these/i);
+    const limits = artifactLimitsCopy(initialSessionGraph);
+    expect(limits.heading).toBe("What this case does not yet prove");
+    expect(limits.body).toMatch(/handwritten adjuster notes/i);
+    expect(limits.body).toMatch(/15%/);
+    expect(limits.body).toMatch(/review time/i);
+    expect(limits.body).toMatch(/hackathon exists to answer these/i);
   });
 
   it("carries reuse of the prior pilot spec into the artifact pilot section", () => {
@@ -778,12 +784,12 @@ describe("session outcome", () => {
     const agreed = saveSessionOutcome(cold, {
       useCase: "  AI-assisted claims intake extraction  ",
       constraint: "Human review on low-confidence extractions",
-      nextStep: "6-week pilot on 500 anonymised claims",
+      nextStep: "3-day hackathon to scope a six-week pilot",
     });
 
     expect(agreed.outcome.useCase).toBe("AI-assisted claims intake extraction");
     expect(agreed.outcome.constraint).toBe("Human review on low-confidence extractions");
-    expect(agreed.outcome.nextStep).toBe("6-week pilot on 500 anonymised claims");
+    expect(agreed.outcome.nextStep).toBe("3-day hackathon to scope a six-week pilot");
     expect(artifactHeadline(agreed.outcome.useCase)).not.toBe("Business case awaiting session evidence");
     expect(artifactPilotScopeCopy(agreed, brands.cdw)).not.toBe("Not yet defined");
   });
@@ -799,5 +805,48 @@ describe("session outcome", () => {
     expect(edited.outcome.owner).toBe(initialSessionGraph.outcome.owner);
     expect(edited.captures).toEqual(initialSessionGraph.captures);
     expect(edited.valueInputs).toEqual(initialSessionGraph.valueInputs);
+  });
+});
+
+describe("solution ranking and hackathon booking", () => {
+  it("reorders solutions until locked, then books a dated hackathon", () => {
+    const first = initialSessionGraph.ranking.order[0];
+    const second = initialSessionGraph.ranking.order[1];
+    const moved = moveSolution(initialSessionGraph, second, "up");
+    expect(moved.ranking.order[0]).toBe(second);
+    expect(moved.ranking.order[1]).toBe(first);
+
+    const locked = lockRanking(moved);
+    expect(locked.ranking.locked).toBe(true);
+    expect(winningSolution(locked)?.id).toBe(second);
+    expect(moveSolution(locked, first, "up")).toBe(locked);
+
+    const booked = bookHackathon(locked, {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Dana Reyes",
+      question: "Can we prove handwritten-note assist on Heartland forms?",
+    });
+    expect(booked.hackathon?.booked).toBe(true);
+    expect(booked.outcome.nextStep).toContain("2026-10-14");
+    expect(artifactLimitsCopy(booked).body).toContain("2026-10-14");
+
+    const unlocked = unlockRanking(booked);
+    expect(unlocked.ranking.locked).toBe(false);
+    expect(unlocked.hackathon).toBeNull();
+  });
+
+  it("uses hackathon-substantiating artifact actions instead of a pilot kickoff", () => {
+    const actions = artifactActions("partner", false, "facilitated");
+    expect(actions.primary).toBe("Start DAF funding request");
+    expect(actions.secondary).toBeNull();
+    expect(JSON.stringify(actions)).not.toMatch(/pilot kickoff|confirm hackathon capacity/i);
+  });
+
+  it("sets a Google facilitator when delivery is google-facilitated", () => {
+    const next = applyDeliveryMode(initialSessionGraph, "google-facilitated");
+    expect(next.session.delivery).toBe("google-facilitated");
+    expect(next.session.facilitator?.name).toBe("Priya Raghavan");
   });
 });

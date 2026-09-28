@@ -16,6 +16,7 @@ const steps = [
   { href: "/scope", label: "Scope" },
   { href: "/plan", label: "Plan" },
   { href: "/run", label: "Run" },
+  { href: "/rank", label: "Rank" },
   { href: "/artifact", label: "Artifact" },
   { href: "/pilot-spec", label: "Pilot spec" },
 ];
@@ -28,9 +29,12 @@ export function BrandFlowFrame({ children }: { children: React.ReactNode }) {
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const sessionHeader = mergesSessionHeader(pathname);
   const people = withBrandPeople(brand);
-  const facilitation = graph.session.delivery === "self-service"
-    ? "Customer self-service · no partner facilitator present"
-    : `Facilitated by ${graph.session.facilitator?.name ?? "Ravi Menon"} · ${people.facilitatorOrg}`;
+  const facilitation =
+    graph.session.delivery === "self-service"
+      ? "Customer self-service · uncommon scale path · no partner facilitator present"
+      : graph.session.delivery === "google-facilitated"
+        ? `Google-facilitated by ${graph.session.facilitator?.name ?? "Priya Raghavan"} · Google`
+        : `Facilitated by ${graph.session.facilitator?.name ?? "Ravi Menon"} · ${people.facilitatorOrg}`;
 
   return (
     <div

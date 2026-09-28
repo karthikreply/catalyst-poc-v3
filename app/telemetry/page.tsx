@@ -23,8 +23,8 @@ import { formatCompactCurrency } from "@/lib/value";
 const outcomeTone: Record<TelemetryOutcome, string> = {
   Scoped: "bg-black/6 text-black/62",
   Run: "bg-sky-100 text-sky-900",
-  "Pilot proposed": "bg-amber-100 text-amber-900",
-  "Pilot funded": "bg-emerald-100 text-emerald-900",
+  "Hackathon proposed": "bg-amber-100 text-amber-900",
+  "Hackathon booked": "bg-emerald-100 text-emerald-900",
 };
 
 function OutcomeStatus({ outcome }: { outcome: TelemetryOutcome }) {
@@ -73,15 +73,19 @@ export default function TelemetryPage() {
       partner: brand.partnerName as TelemetrySession["partner"],
       industry: graph.session.industry,
       pattern,
-      outcome: graph.session.scopeMode === "cold" && !hasSessionValue ? "Scoped" : "Pilot proposed",
+      outcome: graph.hackathon?.booked
+        ? "Hackathon booked"
+        : graph.session.scopeMode === "cold" && !hasSessionValue
+          ? "Scoped"
+          : "Hackathon proposed",
       fundedValue: 0,
       opportunityValue: hasSessionValue ? graph.outcome.annualValue : undefined,
       customer: graph.session.customerName,
-      delivery: graph.session.delivery,
+      delivery: graph.session.delivery === "google-facilitated" ? "google-facilitated" : graph.session.delivery,
       mechanic: graph.session.mechanic,
       closeStyle: graph.session.closeStyle,
       qualified: graph.session.qualified,
-      converted: false,
+      converted: Boolean(graph.hackathon?.booked),
       fundingClaimSubmitted: false,
       daysToFunded: null,
     };
@@ -94,13 +98,13 @@ export default function TelemetryPage() {
   const funnel = [
     ["Scoped", rows.length],
     ["Run", summary.sessionsRun],
-    ["Pilot proposed", summary.pilotsProposed],
-    ["Pilot funded", summary.pilotsFunded],
+    ["Hackathon proposed", summary.hackathonsProposed],
+    ["Hackathon booked", summary.hackathonsBooked],
   ] as [string, number][];
   const patternConversion = Object.fromEntries(
     countBy("pattern").map(([pattern, count]) => {
-      const funded = rows.filter((row) => row.pattern === pattern && row.outcome === "Pilot funded").length;
-      return [pattern, `${funded} funded of ${count}`];
+      const booked = rows.filter((row) => row.pattern === pattern && row.outcome === "Hackathon booked").length;
+      return [pattern, `${booked} booked of ${count}`];
     }),
   );
   const mechanicRows: [string, number][] = [
@@ -110,8 +114,8 @@ export default function TelemetryPage() {
   const valueSprintConversion = mechanicConversion(rows, "value-sprint");
   const ghostLedgerConversion = mechanicConversion(rows, "ghost-ledger");
   const mechanicDetails = {
-    "Value sprint": `${valueSprintConversion.funded} funded of ${valueSprintConversion.total} · ${valueSprintConversion.rate}% conversion`,
-    "Ghost ledger": `${ghostLedgerConversion.funded} funded of ${ghostLedgerConversion.total} · ${ghostLedgerConversion.rate}% conversion`,
+    "Value sprint": `${valueSprintConversion.funded} booked of ${valueSprintConversion.total} · ${valueSprintConversion.rate}% conversion`,
+    "Ghost ledger": `${ghostLedgerConversion.funded} booked of ${ghostLedgerConversion.total} · ${ghostLedgerConversion.rate}% conversion`,
   };
   const overlayRow = rows.find((row) => row.id === graph.session.id);
   const recent = [
@@ -155,14 +159,14 @@ export default function TelemetryPage() {
           ? [
               ["My team's sessions in Q3 2026", teamThisQuarter.toLocaleString()],
               ["Funding claims submitted", summary.fundingClaimsSubmitted.toLocaleString()],
-              ["Pilots funded", summary.pilotsFunded.toLocaleString()],
-              ["Funded pilot value", formatCompactCurrency(summary.fundedPipelineValue)],
+              ["Hackathons booked", summary.hackathonsBooked.toLocaleString()],
+              ["Substantiated value", formatCompactCurrency(summary.fundedPipelineValue)],
             ]
           : [
               ["Sessions run", summary.sessionsRun.toLocaleString()],
-              ["Pilots proposed", summary.pilotsProposed.toLocaleString()],
-              ["Pilots funded", summary.pilotsFunded.toLocaleString()],
-              ["Funded pilot value", formatCompactCurrency(summary.fundedPipelineValue)],
+              ["Hackathons proposed", summary.hackathonsProposed.toLocaleString()],
+              ["Hackathons booked", summary.hackathonsBooked.toLocaleString()],
+              ["Substantiated value", formatCompactCurrency(summary.fundedPipelineValue)],
             ]
         ).map(([label, value]) => (
           <div key={label} className="md-card-elevated p-5"><p className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">{label}</p><p className="md-headline-medium mt-2">{value}</p></div>
@@ -201,7 +205,7 @@ export default function TelemetryPage() {
                   <td className="px-5 py-4">{row.partner}</td>
                   <td className="px-5 py-4">{row.industry}</td>
                   <td className="px-5 py-4">{row.pattern}</td>
-                  <td className="px-5 py-4">{row.delivery === "self-service" ? "Self-service" : "Facilitated"}</td>
+                  <td className="px-5 py-4">{row.delivery === "self-service" ? "Customer-run" : row.delivery === "google-facilitated" ? "Google-facilitated" : "Partner-facilitated"}</td>
                   <td className="px-5 py-4">{row.mechanic === "ghost-ledger" ? "Ghost ledger" : "Value sprint"}</td>
                   <td className="px-5 py-4">{row.closeStyle === "board-slide" ? "Board slide" : "Owner and ask"}</td>
                   <td className="px-5 py-4">{row.delivery === "facilitated" ? "—" : row.qualified ? "Qualified" : "Not qualified"}</td>

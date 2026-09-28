@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { brands } from "@/lib/brands";
 import { initialSessionGraph } from "@/lib/seed";
-import { applyClaimsVolumeChoice, applyCloseStyle, applyExactClaimsVolume } from "@/lib/session";
+import { applyClaimsVolumeChoice, applyCloseStyle, applyExactClaimsVolume, bookHackathon, lockRanking } from "@/lib/session";
 
 const { useSessionMock } = vi.hoisted(() => ({
   useSessionMock: vi.fn(),
@@ -58,7 +58,7 @@ describe("board-slide close", () => {
     return renderToStaticMarkup(<ArtifactPage />);
   }
 
-  it("renders verbatim board-slide captures after the proposed pilot", () => {
+  it("renders verbatim board-slide captures after the hackathon scope section", () => {
     const graph = applyCloseStyle({
       ...initialSessionGraph,
       captures: [
@@ -80,7 +80,8 @@ describe("board-slide close", () => {
     expect(markup).toContain("Dana Reyes, VP Claims Operations");
     expect(markup).toContain("“My team stopped working weekends.”");
     expect(markup).toContain("Michelle Dorsey, Claims Supervisor");
-    expect(markup.indexOf("The proposed pilot")).toBeLessThan(markup.indexOf("In six months"));
+    expect(markup).toContain("What the hackathon will scope");
+    expect(markup.indexOf("What the hackathon will scope")).toBeLessThan(markup.indexOf("In six months"));
     expect(markup.indexOf("In six months")).toBeLessThan(markup.indexOf("The ask"));
   });
 
@@ -97,5 +98,23 @@ describe("board-slide close", () => {
     const graph = applyCloseStyle(initialSessionGraph, "board-slide");
 
     expect(renderArtifact(graph)).not.toContain("In six months");
+  });
+
+  it("shows hackathon confirmation when booked, and a Rank link when not", () => {
+    const booked = bookHackathon(lockRanking(initialSessionGraph), {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Dana Reyes",
+      question: "Can we prove extraction on Heartland forms?",
+    });
+
+    expect(renderArtifact(booked)).toContain("Hackathon confirmed · 2026-10-14");
+    expect(renderArtifact(booked)).toContain("Priya Raghavan (Google)");
+    expect(renderArtifact(booked)).not.toContain("Confirm hackathon capacity");
+
+    expect(renderArtifact(initialSessionGraph)).toContain("No hackathon booked yet");
+    expect(renderArtifact(initialSessionGraph)).toContain('href="/rank"');
+    expect(renderArtifact(initialSessionGraph)).not.toContain("Confirm hackathon capacity");
   });
 });

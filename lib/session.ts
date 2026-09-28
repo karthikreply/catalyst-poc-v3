@@ -2,6 +2,7 @@ import type { Brand } from "./brands";
 import { ledgerAnnualTotal } from "./cost-model";
 import {
   initialSessionGraph,
+  type HackathonBooking,
   patterns,
   prework,
   type Actor,
@@ -141,6 +142,11 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
     coldCompany: value.coldCompany ?? null,
     coldAttendees: value.coldAttendees ?? [],
     outcome,
+    solutions: value.solutions?.length ? value.solutions : initialSessionGraph.solutions,
+    ranking: value.ranking?.order?.length
+      ? { order: value.ranking.order, locked: Boolean(value.ranking.locked) }
+      : initialSessionGraph.ranking,
+    hackathon: value.hackathon ?? null,
   };
 }
 
@@ -208,6 +214,11 @@ export function applyColdScope(
         attendance: "attending",
       };
     }),
+    solutions: graph.solutions.length ? graph.solutions : initialSessionGraph.solutions,
+    ranking: enteringCold
+      ? { order: (graph.solutions.length ? graph.solutions : initialSessionGraph.solutions).map((s) => s.id), locked: false }
+      : graph.ranking,
+    hackathon: enteringCold ? null : graph.hackathon,
   };
 }
 
@@ -306,12 +317,18 @@ export function applyDeliveryMode(graph: SessionGraph, delivery: Delivery): Sess
           respondentConfirmed: true,
         },
   );
+  const facilitator =
+    delivery === "self-service"
+      ? null
+      : delivery === "google-facilitated"
+        ? { name: "Priya Raghavan", title: "Google Partner Development Manager" }
+        : { name: "Ravi Menon", title: "Solution Specialist, AI & Data" };
   const next = {
     ...graph,
     session: {
       ...graph.session,
       delivery,
-      facilitator: delivery === "self-service" ? null : { name: "Ravi Menon", title: "Solution Specialist, AI & Data" },
+      facilitator,
       qualified: false,
     },
     valueInputs,
@@ -554,10 +571,15 @@ export function inputsConfirmedByCopy(graph: SessionGraph) {
   return `Inputs confirmed by ${names.slice(0, -1).join(", ")}, and ${names.at(-1)}.`;
 }
 
-export const artifactLimitsCopy = {
-  heading: "What this case does not yet prove",
-  body: "Extraction accuracy on Heartland's own forms, including handwritten adjuster notes. Whether the 15% Michelle flagged behaves as her team expects. Actual review time once fields are pre-filled. The pilot exists to answer these.",
-};
+export function artifactLimitsCopy(graph: SessionGraph) {
+  const dateLine = graph.hackathon?.booked && graph.hackathon.date
+    ? ` The three-day hackathon on ${graph.hackathon.date} exists to answer these and to scope the six-week pilot.`
+    : " The three-day hackathon exists to answer these and to scope the six-week pilot.";
+  return {
+    heading: "What this case does not yet prove",
+    body: `Extraction accuracy on Heartland's own forms, including handwritten adjuster notes. Whether the 15% Michelle flagged behaves as her team expects. Actual review time once fields are pre-filled.${dateLine}`,
+  };
+}
 
 export function artifactHeadline(useCase: string) {
   if (!useCase.trim()) return "Business case awaiting session evidence";
@@ -587,7 +609,7 @@ export function artifactActions(actor: Actor, qualified: boolean, delivery: Deli
     }
     return {
       primary: "Start DAF funding request",
-      secondary: qualified ? "Request a facilitated session" : "Schedule pilot kickoff",
+      secondary: qualified ? "Request a facilitated session" : null,
       tertiary: "Contact my partner manager with this business case",
     };
   }
@@ -646,18 +668,128 @@ export function applyFundingRoute(graph: SessionGraph, route: FundingRoute): Ses
 }
 
 export function fundingAskCopy(graph: SessionGraph) {
+  const winner = winningSolution(graph);
+  const winnerLabel = winner ? ` on ${winner.title}` : "";
   if (graph.session.scopeMode === "cold") {
     const economicBuyer = graph.attendees.find((attendee) => /cfo|finance|economic buyer|executive sponsor/i.test(attendee.role));
     const technicalOwner = graph.attendees.find((attendee) => /developer|engineer|technical lead/i.test(attendee.role));
     if (!economicBuyer) {
-      return "Confirm an economic buyer before requesting funding for the six-week pilot.";
+      return "Confirm an economic buyer before requesting funding that substantiates the hackathon booking.";
     }
-    return `${economicBuyer.name}: fund the six-week pilot${technicalOwner ? ` and allow ${technicalOwner.name} to prepare the pilot data` : ""}.`;
+    return `${economicBuyer.name}: substantiate the three-day hackathon${winnerLabel}${technicalOwner ? ` and confirm ${technicalOwner.name} will be in the room` : ""}.`;
   }
   if (graph.session.fundingRoute === "brief-dana") {
-    return "Dana Reyes: carry the funding ask. Brief Karen so she can fund the six-week pilot and allow Alex Chen’s team to prepare 500 anonymised claims.";
+    return `Dana Reyes: carry the funding ask. Brief Karen so she can substantiate the three-day hackathon${winnerLabel} and confirm Alex Chen joins the room.`;
   }
-  return "Karen Whitfield, CFO: fund the six-week pilot and allow Alex Chen’s team to prepare 500 anonymised claims.";
+  return `Karen Whitfield, CFO: substantiate the three-day hackathon${winnerLabel} and confirm Alex Chen joins the room.`;
+}
+
+export function rankedSolutions(graph: SessionGraph) {
+  const byId = new Map(graph.solutions.map((solution) => [solution.id, solution]));
+  return graph.ranking.order
+    .map((id) => byId.get(id))
+    .filter((solution): solution is NonNullable<typeof solution> => Boolean(solution));
+}
+
+export function winningSolution(graph: SessionGraph) {
+  if (!graph.ranking.locked || graph.ranking.order.length === 0) return null;
+  return graph.solutions.find((solution) => solution.id === graph.ranking.order[0]) ?? null;
+}
+
+export function reorderSolutions(graph: SessionGraph, order: string[]): SessionGraph {
+  if (graph.ranking.locked || graph.hackathon?.booked) return graph;
+  const validIds = new Set(graph.solutions.map((solution) => solution.id));
+  if (order.length !== graph.solutions.length || order.some((id) => !validIds.has(id))) return graph;
+  return { ...graph, ranking: { ...graph.ranking, order: [...order] } };
+}
+
+export function moveSolution(graph: SessionGraph, solutionId: string, direction: "up" | "down"): SessionGraph {
+  const index = graph.ranking.order.indexOf(solutionId);
+  if (index < 0) return graph;
+  const swapWith = direction === "up" ? index - 1 : index + 1;
+  if (swapWith < 0 || swapWith >= graph.ranking.order.length) return graph;
+  const order = [...graph.ranking.order];
+  [order[index], order[swapWith]] = [order[swapWith], order[index]];
+  return reorderSolutions(graph, order);
+}
+
+export function lockRanking(graph: SessionGraph): SessionGraph {
+  if (graph.ranking.order.length === 0) return graph;
+  return {
+    ...graph,
+    ranking: { ...graph.ranking, locked: true },
+    outcome: {
+      ...graph.outcome,
+      nextStep: graph.outcome.nextStep.trim() || "3-day hackathon to scope a six-week pilot",
+    },
+  };
+}
+
+export function unlockRanking(graph: SessionGraph): SessionGraph {
+  return {
+    ...graph,
+    ranking: { ...graph.ranking, locked: false },
+    hackathon: null,
+  };
+}
+
+export function defaultHackathonDraft(graph: SessionGraph): HackathonBooking {
+  const customerOwner =
+    graph.outcome.owner
+    ?? customerSponsor(graph)?.name
+    ?? "Dana Reyes";
+  const partnerSpecialist =
+    graph.session.delivery === "google-facilitated"
+      ? "Ravi Menon"
+      : graph.session.facilitator?.name ?? "Ravi Menon";
+  const googleFacilitator =
+    graph.session.delivery === "google-facilitated"
+      ? graph.session.facilitator?.name ?? "Priya Raghavan"
+      : "Priya Raghavan";
+  const winner = winningSolution(graph);
+  return {
+    date: "",
+    googleFacilitator,
+    partnerSpecialist,
+    customerOwner,
+    question: winner
+      ? `Can we prove ${winner.title.toLowerCase()} on Heartland's own forms in three days?`
+      : "Can we prove the winning solution on Heartland's own forms in three days?",
+    booked: false,
+  };
+}
+
+export function bookHackathon(
+  graph: SessionGraph,
+  draft: Omit<HackathonBooking, "booked">,
+): SessionGraph {
+  if (!graph.ranking.locked) return graph;
+  const date = draft.date.trim();
+  const googleFacilitator = draft.googleFacilitator.trim();
+  const partnerSpecialist = draft.partnerSpecialist.trim();
+  const customerOwner = draft.customerOwner.trim();
+  const question = draft.question.trim();
+  if (!date || !googleFacilitator || !partnerSpecialist || !customerOwner || !question) return graph;
+  return {
+    ...graph,
+    hackathon: {
+      date,
+      googleFacilitator,
+      partnerSpecialist,
+      customerOwner,
+      question,
+      booked: true,
+    },
+    outcome: {
+      ...graph.outcome,
+      nextStep: `3-day hackathon on ${date} to scope a six-week pilot`,
+      owner: customerOwner,
+    },
+    session: {
+      ...graph.session,
+      status: "complete",
+    },
+  };
 }
 
 export function applyPatternChoice(graph: SessionGraph, patternId: string): SessionGraph {

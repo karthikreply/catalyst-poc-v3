@@ -31,9 +31,9 @@ describe("read-only Plan controls", () => {
 
     const markup = renderToStaticMarkup(<PlanPage />);
 
-    expect(markup.match(/disabled=""/g)).toHaveLength(6);
+    expect(markup.match(/disabled=""/g)).toHaveLength(7);
     expect(markup.match(/aria-pressed="true"/g)).toHaveLength(3);
-    expect(markup.match(/aria-pressed="false"/g)).toHaveLength(3);
+    expect(markup.match(/aria-pressed="false"/g)).toHaveLength(4);
   });
 
   it("renders at most one partner context", () => {
@@ -84,6 +84,9 @@ describe("read-only Plan controls", () => {
     const markup = renderToStaticMarkup(<PlanPage />);
 
     expect(markup).toContain("How it closes");
+    expect(markup).toContain("Partner-facilitated");
+    expect(markup).toContain("Google-facilitated");
+    expect(markup).toContain("Customer-run");
     expect(markup).toContain("Owner and ask");
     expect(markup).toContain("Board-slide close");
     expect(markup).toContain("Time Traveler: imagine the pilot succeeded, then capture the sponsor");

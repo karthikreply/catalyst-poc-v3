@@ -157,7 +157,7 @@ describe("what the session agreed", () => {
     render(<RunPage />);
 
     expect(screen.getByLabelText("Use case")).toHaveValue("AI-assisted claims intake extraction");
-    expect(screen.getByLabelText("Next step")).toHaveValue("6-week pilot on 500 anonymised claims");
+    expect(screen.getByLabelText("Next step")).toHaveValue("3-day hackathon to scope a six-week pilot");
   });
 });
 
