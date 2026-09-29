@@ -79,9 +79,11 @@ export default function PilotSpecPage() {
           <Button onClick={copyBrief} className="bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]">
             {briefCopied ? <Check /> : <Clipboard />}{briefCopied ? "Setup brief copied" : "Copy setup brief"}
           </Button>
-          <Link href="/telemetry" className={cn(buttonVariants({ variant: "outline" }), "border-black/30 bg-[#f4f4f1] hover:bg-black/[.06]")}>
-            {viewer.actor === "cpm" ? "View program telemetry" : "View telemetry"} <ArrowRight />
-          </Link>
+          {viewer.actor !== "cpm" && (
+            <Link href="/telemetry" className={cn(buttonVariants({ variant: "outline" }), "border-black/30 bg-[#f4f4f1] hover:bg-black/[.06]")}>
+              View telemetry <ArrowRight />
+            </Link>
+          )}
           <p className="text-sm text-black/55">
             The brief goes to {graph.session.customerName}&apos;s build team; they stand the environment up after security review.
           </p>

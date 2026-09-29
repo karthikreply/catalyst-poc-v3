@@ -56,7 +56,7 @@ export default function RunPage() {
       {selfService && (
         <p className="border-b border-black/10 bg-[#fafaf8] px-5 py-2 text-xs text-black/55 lg:px-8">Customer self-service — no partner facilitator present. Output is a qualification-grade business case.</p>
       )}
-      {viewer.actor === "cpm" && (
+      {viewer.actor === "cpm" && !canEditSession && (
         <p className="border-b border-black/10 bg-[#fafaf8] px-5 py-2 text-xs text-black/55 lg:px-8">Historical session record — the platform vendor sees completed evidence shared by the partner, not live session activity.</p>
       )}
 
@@ -66,6 +66,7 @@ export default function RunPage() {
             {agenda.map((step) => (
               <div key={step.id}>
                 <button
+                  type="button"
                   onClick={() => setActiveStep(step.id)}
                   className={cn(
                     "flex w-full items-center gap-2 rounded-sm px-2 py-2.5 text-left text-xs transition-colors hover:bg-black/[.04] focus-visible:outline-2",

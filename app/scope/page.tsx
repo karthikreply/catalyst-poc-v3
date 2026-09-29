@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronDown, Plus, TriangleAlert } from "lucide-react";
+import { ArrowRight, ChevronDown, TriangleAlert } from "lucide-react";
 
+import { AccountLookupPanel, ColdAccountEditor } from "@/components/account-lookup-panel";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,12 +15,14 @@ import {
   heartlandAccountRecord,
   prmBadge,
 } from "@/lib/seed/accountRecord";
-import type { PartnerNote } from "@/lib/seed";
+import type { ColdAttendee, PartnerNote } from "@/lib/seed";
 import {
   canViewPartnerScope,
   claimsPayoffCopy,
-  coldRoleMatch,
   coldScopeDefaults,
+  demonstrationColdAccount,
+  enrichAttendeeName,
+  withDemonstrationColdAccount,
   isValidExactClaimsVolume,
   missingColdRoles,
   type ClaimsVolumeChoice,
@@ -35,14 +38,12 @@ const claimsChoices: { label: string; value: ClaimsVolumeChoice }[] = [
   { label: "Enter exact number", value: "exact" },
 ];
 
-const roleExamples = [
-  "Operations owner",
-  "Frontline supervisor",
-  "Developer",
-  "Compliance",
-  "Infrastructure",
-  "Economic buyer",
-];
+function withAttendeeIds(attendees: ColdAttendee[]): ColdAttendee[] {
+  return attendees.map((person, index) => ({
+    ...person,
+    id: person.id?.trim() || `cold-attendee-${index + 1}`,
+  }));
+}
 
 export default function ScopePage() {
   const {
@@ -72,13 +73,20 @@ export default function ScopePage() {
   );
   const seededComplete = Boolean(claimsComplete && fundingRoute);
   const coldCompany = graph.coldCompany ?? coldScopeDefaults.company;
-  const coldAttendees = graph.coldAttendees.length ? graph.coldAttendees : coldScopeDefaults.attendees;
+  const coldAttendees = withAttendeeIds(
+    graph.coldAttendees.length ? graph.coldAttendees : coldScopeDefaults.attendees,
+  );
   const companyComplete = Boolean(coldCompany.name.trim() && coldCompany.industry.trim() && coldCompany.sizeBand.trim());
   const completeAttendees = coldAttendees.filter((person) => person.name.trim() && person.role.trim());
   const coldComplete = companyComplete && completeAttendees.length >= 3;
   const coldGaps = missingColdRoles(graph);
   const scopeComplete = mode === "seeded" ? seededComplete : coldComplete;
   const missingAttendeeCount = Math.max(0, 3 - completeAttendees.length);
+  const scopeEditable = canEditSession || viewer.actor === "cpm";
+  const [seededNameCheck, setSeededNameCheck] = useState("");
+  const seededEnrichment = seededNameCheck.trim()
+    ? enrichAttendeeName(seededNameCheck, true)
+    : null;
   const scopeGuidance = mode === "seeded"
     ? !claimsComplete && !fundingRoute
       ? "Confirm claims volume and funding route."
@@ -110,9 +118,64 @@ export default function ScopePage() {
     applyFunding(route);
   }
 
+  useEffect(() => {
+    if (mode !== "cold" || !scopeEditable) return;
+    const filled = withDemonstrationColdAccount(graph.coldCompany, graph.coldAttendees);
+    if (!filled) return;
+    setColdScope(filled.company, withAttendeeIds(filled.attendees));
+  }, [mode, scopeEditable, graph.coldCompany, graph.coldAttendees, setColdScope]);
+
   function clearToColdMode() {
-    if (!canEditSession) return;
-    setColdScope(coldScopeDefaults.company, coldScopeDefaults.attendees);
+    if (!scopeEditable) return;
+    setColdScope(coldScopeDefaults.company, withAttendeeIds(coldScopeDefaults.attendees));
+  }
+
+  function handleLookupHit() {
+    restoreSeededScope();
+  }
+
+  function handleLookupMiss(query: string) {
+    if (!scopeEditable) return;
+    const demo = demonstrationColdAccount(query);
+    setColdScope(demo.company, withAttendeeIds(demo.attendees));
+  }
+
+  const lookupPanel = (
+    <AccountLookupPanel
+      actor={viewer.actor}
+      onHit={handleLookupHit}
+      onMiss={handleLookupMiss}
+    />
+  );
+
+  if (viewer.actor === "cpm") {
+    return (
+      <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm text-black/48">Customer entry</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Scope the value session</h1>
+            <p className="mt-2 text-sm text-black/55">Look up your account, or add it.</p>
+          </div>
+          <ScopeNextStep
+            complete={mode === "cold" && coldComplete}
+            guidance={mode === "cold" ? scopeGuidance : "Look up your account, or add it."}
+          />
+        </div>
+        {lookupPanel}
+        {mode === "cold" && (
+          <ColdAccountEditor
+            coldCompany={coldCompany}
+            coldAttendees={coldAttendees}
+            accountHit={false}
+            canEdit={scopeEditable}
+            setColdScope={setColdScope}
+            coldGaps={coldGaps}
+            graphAttendeeCount={graph.attendees.length}
+          />
+        )}
+      </div>
+    );
   }
 
   if (!canViewPartnerScope(viewer.actor)) {
@@ -182,17 +245,19 @@ export default function ScopePage() {
         <ScopeNextStep
           complete={scopeComplete}
           guidance={scopeGuidance}
-          secondaryAction={mode === "seeded" && canEditSession ? (
+          secondaryAction={mode === "seeded" && scopeEditable ? (
               <Button variant="outline" onClick={clearToColdMode}>
                 Start without the record
               </Button>
-            ) : mode === "cold" && canEditSession ? (
+            ) : mode === "cold" && scopeEditable ? (
               <Button variant="outline" onClick={restoreSeededScope}>
                 Use account record instead
               </Button>
             ) : null}
         />
       </div>
+
+      {lookupPanel}
 
       {mode === "seeded" ? (
         <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,24rem)]">
@@ -218,6 +283,36 @@ export default function ScopePage() {
               <p className="mt-4 text-sm leading-7 text-black/70">
                 Dana Reyes called the claims team “drowning” on 14 Jan while raising board pressure on AI. The team handles a document-heavy intake process with PDF claim forms and a six-day cycle to first decision. Heartland covered Q1 volume with overtime rather than hiring. Compliance was flagged early: Robert Osei requires an audit trail on anything automated.
               </p>
+            </section>
+
+            <section className="rounded-sm border border-black/10 bg-white p-5">
+              <h2 className="font-semibold">Confirm who is in the room</h2>
+              <p className="mt-1 text-sm text-black/55">Enter a name from the Heartland record to confirm their role.</p>
+              <Input
+                className="mt-3 rounded-sm"
+                value={seededNameCheck}
+                onChange={(event) => setSeededNameCheck(event.target.value)}
+                placeholder="Dana Reyes"
+                aria-label="Confirm attendee name"
+                readOnly={!scopeEditable}
+              />
+              {seededEnrichment && (
+                <div className="mt-3 rounded-sm border border-black/10 bg-[#fafaf8] p-3 text-sm" role="status">
+                  {seededEnrichment.kind === "known" ? (
+                    <>
+                      <p className="font-medium">{seededEnrichment.name} · {seededEnrichment.role}</p>
+                      <p className="mt-1 text-black/62">{seededEnrichment.prompt}</p>
+                      <div className="mt-2 flex gap-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => setSeededNameCheck("")}>Yes</Button>
+                        <Button type="button" size="sm" variant="outline" onClick={() => setSeededNameCheck("")}>No</Button>
+                      </div>
+                      <p className="mt-2 text-xs text-black/45">Source stays CRM.</p>
+                    </>
+                  ) : (
+                    <p className="text-black/62">{seededEnrichment.prompt}</p>
+                  )}
+                </div>
+              )}
             </section>
 
             <section className="rounded-sm border border-[var(--brand-accent)]/35 bg-[color-mix(in_srgb,var(--brand-accent)_4%,white)] p-5">
@@ -398,103 +493,15 @@ export default function ScopePage() {
           </section>
         </div>
       ) : (
-        <div className="mt-8 grid gap-8 lg:grid-cols-[.8fr_1.2fr]">
-          <section className="rounded-sm border border-black/10 bg-white p-6">
-            <h2 className="text-lg font-semibold">Company</h2>
-            {([
-              ["name", "Company name", "Northwind Insurance"],
-              ["industry", "Industry", "Insurance"],
-              ["sizeBand", "Size band", "$500M–$1B"],
-            ] as const).map(([field, label, placeholder]) => (
-              <label key={field} className="mt-4 block text-sm font-medium">
-                {label}
-                <Input
-                  value={coldCompany[field]}
-                  readOnly={!canEditSession}
-                  onChange={(event) => setColdScope({ ...coldCompany, [field]: event.target.value }, coldAttendees)}
-                  placeholder={placeholder}
-                  className="mt-2 rounded-sm"
-                />
-              </label>
-            ))}
-            <p className="mt-4 text-xs leading-5 text-black/48">Prefilled with an example — select any field and type over it. Industry drives pattern matching. Size stays coarse; exact revenue is not required.</p>
-          </section>
-
-          <section className="rounded-sm border border-black/10 bg-white p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold">Who is likely to be in the room?</h2>
-                <p className="mt-1 text-sm text-black/48">Three to six people, prefilled with an example — type over any name or role. The pattern supplies why each role matters.</p>
-                <p className="mt-3 max-w-xl text-xs leading-5 text-black/55">
-                  Recognised role examples: {roleExamples.join(", ")}. Job titles are fine; we match them to these responsibilities.
-                </p>
-              </div>
-              {coldAttendees.length < 6 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setColdScope(coldCompany, [...coldAttendees, { name: "", role: "" }])}
-                >
-                  <Plus /> Add person
-                </Button>
-              )}
-            </div>
-
-            <div className="mt-5 space-y-3">
-              {coldAttendees.map((person, index) => {
-                const matchedRole = coldRoleMatch(person.role);
-                return (
-                <div key={index} className="grid items-start gap-3 sm:grid-cols-2">
-                  <Input
-                    aria-label={`Attendee ${index + 1} name`}
-                    value={person.name}
-                    readOnly={!canEditSession}
-                    placeholder="Name"
-                    onChange={(event) => setColdScope(
-                      coldCompany,
-                      coldAttendees.map((row, rowIndex) => rowIndex === index ? { ...row, name: event.target.value } : row),
-                    )}
-                  />
-                  <div>
-                    <Input
-                      aria-label={`Attendee ${index + 1} role`}
-                      aria-describedby={person.role.trim() ? `attendee-${index + 1}-role-status` : undefined}
-                      value={person.role}
-                      readOnly={!canEditSession}
-                      placeholder={roleExamples[index] ?? "Role"}
-                      onChange={(event) => setColdScope(
-                        coldCompany,
-                        coldAttendees.map((row, rowIndex) => rowIndex === index ? { ...row, role: event.target.value } : row),
-                      )}
-                    />
-                    {person.role.trim() && (
-                      <p
-                        id={`attendee-${index + 1}-role-status`}
-                        role="status"
-                        aria-live="polite"
-                        className={cn("mt-1 text-xs", matchedRole ? "text-emerald-700" : "text-amber-800")}
-                      >
-                        {matchedRole ? `Matched as ${matchedRole}` : "Not matched to a required pattern role"}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                );
-              })}
-            </div>
-
-            {graph.attendees.length >= 3 && coldGaps.length > 0 && (
-              <div className="mt-5 rounded-sm border border-amber-300 bg-amber-50 p-4">
-                <p className="text-sm font-semibold">Roles missing for this pattern</p>
-                <ul className="mt-2 space-y-2 text-sm">
-                  {coldGaps.map((gap) => <li key={gap.role}><strong>{gap.role}</strong> — {gap.reason}</li>)}
-                </ul>
-              </div>
-            )}
-
-          </section>
-        </div>
+        <ColdAccountEditor
+          coldCompany={coldCompany}
+          coldAttendees={coldAttendees}
+          accountHit={false}
+          canEdit={scopeEditable}
+          setColdScope={setColdScope}
+          coldGaps={coldGaps}
+          graphAttendeeCount={graph.attendees.length}
+        />
       )}
     </div>
   );

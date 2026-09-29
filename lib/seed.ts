@@ -16,6 +16,7 @@ export type SolutionCandidate = {
 
 export type RankingState = {
   order: string[];
+  selected: string[];
   locked: boolean;
 };
 
@@ -26,6 +27,12 @@ export type HackathonBooking = {
   customerOwner: string;
   question: string;
   booked: boolean;
+  /** Solution ids booked into the hackathon (exactly three when booked). */
+  solutionIds: string[];
+  /** Demo assumes Calendar compose was completed after the user opens it. */
+  calendarAdded?: boolean;
+  /** Demo assumes a Google Meet room was opened after the user starts it. */
+  meetAdded?: boolean;
 };
 
 export type ColdCompany = {
@@ -35,6 +42,7 @@ export type ColdCompany = {
 };
 
 export type ColdAttendee = {
+  id?: string;
   name: string;
   role: string;
 };
@@ -59,6 +67,8 @@ export type Session = {
   reusePriorPilotSpec: boolean | null;
   claimsVolumeChoice: "about-400" | "range-250-500" | "unconfirmed" | "exact" | null;
   scopeMode: ScopeMode;
+  /** Customer door: true once a format card has started the customer session. */
+  customerFormatChosen?: boolean;
 };
 
 export type AgendaStep = {
@@ -139,6 +149,8 @@ export type SessionGraph = {
   solutions: SolutionCandidate[];
   ranking: RankingState;
   hackathon: HackathonBooking | null;
+  /** CPM votes: one solution id per attendee id. */
+  votes: Record<string, string>;
 };
 
 export const patterns = [
@@ -237,6 +249,29 @@ export const heartlandSolutions: SolutionCandidate[] = [
     products: ["Gemini", "Vertex AI Search"],
   },
 ];
+
+/** Value-sprint shortlist — four prepared business-case solutions. */
+export const businessCaseSolutionIds = [
+  "sol-intake-extraction",
+  "sol-low-confidence-review",
+  "sol-handwriting-assist",
+  "sol-audit-trail",
+] as const;
+
+/** Ghost-ledger shortlist — three cost-of-waiting solutions. */
+export const ledgerSolutionIds = [
+  "sol-overtime-reduction",
+  "sol-rework-leakage",
+  "sol-status-summary",
+] as const;
+
+export const businessCaseSolutions = heartlandSolutions.filter((solution) =>
+  (businessCaseSolutionIds as readonly string[]).includes(solution.id),
+);
+
+export const ledgerSolutions = heartlandSolutions.filter((solution) =>
+  (ledgerSolutionIds as readonly string[]).includes(solution.id),
+);
 
 export const initialSessionGraph: SessionGraph = {
   session: {
@@ -345,9 +380,11 @@ export const initialSessionGraph: SessionGraph = {
   solutions: heartlandSolutions,
   ranking: {
     order: heartlandSolutions.map((solution) => solution.id),
+    selected: [],
     locked: false,
   },
   hackathon: null,
+  votes: {},
   attendees: [
     { id: "dana", name: "Dana Reyes", role: "VP Claims Operations", reason: "Owns the operating outcome and can sponsor the pilot.", source: "crm", attendance: "attending" },
     { id: "michelle", name: "Michelle Dorsey", role: "Claims Supervisor", reason: "Brings the frontline workflow and handling-cost evidence.", source: "crm", attendance: "attending" },

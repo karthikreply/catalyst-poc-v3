@@ -27,6 +27,10 @@ import {
   applyReusePriorPilotSpec,
   bindAnnualValue,
   bookHackathon as bookHackathonInGraph,
+  chooseCustomerFormat as chooseCustomerFormatInGraph,
+  markHackathonCalendarAdded as markHackathonCalendarAddedInGraph,
+  markHackathonMeetAdded as markHackathonMeetAddedInGraph,
+  castVote as castVoteInGraph,
   graphForActor,
   hydrateSessionGraph,
   isSessionReadOnly,
@@ -35,6 +39,7 @@ import {
   restoreSeededGraph,
   savePartnerNote as savePartnerNoteInGraph,
   saveSessionOutcome as saveSessionOutcomeInGraph,
+  toggleSelected as toggleSelectedInGraph,
   unlockRanking as unlockRankingInGraph,
   updateCapture as updateCaptureInGraph,
   updateValueConfirmer as updateValueConfirmerInGraph,
@@ -73,10 +78,16 @@ type SessionContextValue = {
   restoreSeededScope: () => void;
   savePartnerNote: (noteId: string | null, text: string) => void;
   moveSolution: (solutionId: string, direction: "up" | "down") => void;
+  toggleSelected: (solutionId: string) => void;
+  castVote: (attendeeId: string, solutionId: string) => void;
   lockRanking: () => void;
   unlockRanking: () => void;
-  bookHackathon: (draft: Omit<HackathonBooking, "booked">) => void;
+  bookHackathon: (draft: Omit<HackathonBooking, "booked" | "solutionIds" | "calendarAdded" | "meetAdded">) => void;
+  markHackathonCalendarAdded: () => void;
+  markHackathonMeetAdded: () => void;
+  chooseCustomerFormat: (mechanic: Mechanic) => void;
   canEditSession: boolean;
+  hydrated: boolean;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -132,7 +143,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const brand = brands[brandId];
   const viewer = viewerForActor(actor, brand);
-  const canEditSession = !isSessionReadOnly(actor);
+  const canEditSession = !isSessionReadOnly(actor, graph);
+  const canCustomerAct = canEditSession || actor === "cpm";
 
   function setBrandId(id: BrandId) {
     setBrandIdState(id);
@@ -223,7 +235,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }
 
   function setActiveStep(stepId: string) {
-    if (!canEditSession) return;
+    // Agenda navigation always moves, even on a read-only session.
     setGraph((current) => ({
       ...current,
       agenda: current.agenda.map((step) => ({
@@ -275,7 +287,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }
 
   function setColdScope(company: ColdCompany, attendees: ColdAttendee[]) {
-    if (!canEditSession) return;
+    // Customer may enter a cold account after a lookup miss.
+    if (!canCustomerAct) return;
     setGraph((current) => {
       if (current.session.scopeMode === "seeded") {
         localStorage.setItem(SEEDED_GRAPH_KEY, JSON.stringify(current));
@@ -285,7 +298,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }
 
   function restoreSeededScope() {
-    if (!canEditSession) return;
+    if (!canCustomerAct) return;
     const saved = localStorage.getItem(SEEDED_GRAPH_KEY);
     let parsed: SessionGraph | null = null;
     if (saved) {
@@ -309,23 +322,49 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }
 
   function moveSolution(solutionId: string, direction: "up" | "down") {
-    if (!canEditSession) return;
+    if (!canCustomerAct) return;
     setGraph((current) => moveSolutionInGraph(current, solutionId, direction));
   }
 
+  function toggleSelected(solutionId: string) {
+    if (!canCustomerAct) return;
+    setGraph((current) => toggleSelectedInGraph(current, solutionId));
+  }
+
+  function castVote(attendeeId: string, solutionId: string) {
+    if (!canCustomerAct) return;
+    setGraph((current) => castVoteInGraph(current, attendeeId, solutionId));
+  }
+
   function lockRanking() {
-    if (!canEditSession) return;
+    if (!canCustomerAct) return;
     setGraph((current) => lockRankingInGraph(current));
   }
 
   function unlockRanking() {
-    if (!canEditSession) return;
+    if (!canCustomerAct) return;
     setGraph((current) => unlockRankingInGraph(current));
   }
 
-  function bookHackathon(draft: Omit<HackathonBooking, "booked">) {
-    if (!canEditSession) return;
+  function bookHackathon(draft: Omit<HackathonBooking, "booked" | "solutionIds" | "calendarAdded" | "meetAdded">) {
+    if (!canCustomerAct) return;
     setGraph((current) => bookHackathonInGraph(current, draft));
+  }
+
+  function markHackathonCalendarAdded() {
+    if (!canCustomerAct) return;
+    setGraph((current) => markHackathonCalendarAddedInGraph(current));
+  }
+
+  function markHackathonMeetAdded() {
+    if (!canCustomerAct) return;
+    setGraph((current) => markHackathonMeetAddedInGraph(current));
+  }
+
+  function chooseCustomerFormat(mechanic: Mechanic) {
+    // Customer door only: starting the session is what makes it editable.
+    if (actor !== "cpm") return;
+    setGraph((current) => chooseCustomerFormatInGraph(current, mechanic));
   }
 
   const value = {
@@ -356,10 +395,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     restoreSeededScope,
     savePartnerNote,
     moveSolution,
+    toggleSelected,
+    castVote,
     lockRanking,
     unlockRanking,
     bookHackathon,
+    markHackathonCalendarAdded,
+    markHackathonMeetAdded,
+    chooseCustomerFormat,
     canEditSession,
+    hydrated,
   };
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

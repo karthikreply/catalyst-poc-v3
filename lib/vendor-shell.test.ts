@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { breadcrumbForPath, isBrandFlowPath, mergesSessionHeader, vendorNavItems } from "./vendor-shell";
+import { breadcrumbForPath, isBrandFlowPath, mergesSessionHeader, navItemsForActor, vendorNavItems } from "./vendor-shell";
 
 describe("vendor shell routing", () => {
   it("keeps dashboard, value sessions, funding, and telemetry live", () => {
@@ -33,11 +33,29 @@ describe("vendor shell routing", () => {
   });
 
   it("produces vendor breadcrumbs for dashboard, flow, funding, and telemetry", () => {
-    expect(breadcrumbForPath("/")).toEqual(["Partner network", "Dashboard"]);
-    expect(breadcrumbForPath("/plan")).toEqual(["Partner network", "Value sessions", "Plan"]);
-    expect(breadcrumbForPath("/rank")).toEqual(["Partner network", "Value sessions", "Rank"]);
+    expect(breadcrumbForPath("/", "partner")).toEqual(["Partner network", "Dashboard"]);
+    expect(breadcrumbForPath("/", "pdm")).toEqual(["Partner network", "Dashboard"]);
+    expect(breadcrumbForPath("/plan", "partner")).toEqual(["Partner network", "Value sessions", "Plan"]);
+    expect(breadcrumbForPath("/rank", "pdm")).toEqual(["Partner network", "Value sessions", "Rank"]);
     expect(isBrandFlowPath("/rank", "partner")).toBe(true);
-    expect(breadcrumbForPath("/funding")).toEqual(["Partner network", "Funding"]);
-    expect(breadcrumbForPath("/telemetry")).toEqual(["Partner network", "Telemetry"]);
+    expect(breadcrumbForPath("/funding", "partner")).toEqual(["Partner network", "Funding"]);
+    expect(breadcrumbForPath("/telemetry", "pdm")).toEqual(["Partner network", "Telemetry"]);
+    expect(breadcrumbForPath("/customer", "partner")).toEqual(["Partner network", "Customer"]);
+    expect(isBrandFlowPath("/customer", "cpm")).toBe(false);
+  });
+
+  it("names the customer's engagement on every page and limits the rail", () => {
+    expect(navItemsForActor("cpm").map((item) => [item.label, item.href])).toEqual([
+      ["Dashboard", "/customer"],
+      ["Value sessions", "/scope"],
+      ["Funding", "/funding"],
+    ]);
+    expect(navItemsForActor("partner").map((item) => item.label)).toEqual(vendorNavItems.map((item) => item.label));
+    expect(navItemsForActor("pdm").find((item) => item.label === "Dashboard")?.href).toBe("/");
+    for (const path of ["/", "/customer", "/scope", "/run", "/rank", "/artifact", "/funding"]) {
+      expect(breadcrumbForPath(path, "cpm")[0]).toBe("Your engagement");
+    }
+    expect(breadcrumbForPath("/funding", "cpm")).toEqual(["Your engagement", "Funding"]);
+    expect(breadcrumbForPath("/run", "cpm")).toEqual(["Your engagement", "Value sessions", "Run"]);
   });
 });

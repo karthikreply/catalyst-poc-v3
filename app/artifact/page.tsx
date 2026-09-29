@@ -6,6 +6,7 @@ import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
 
 import { Button, buttonVariants } from "@/components/ui/button";
+import { GoogleHackathonStack } from "@/components/google-hackathon-stack";
 import { UnavailableControl } from "@/components/unavailable-control";
 import { useSession } from "@/components/session-provider";
 import { withBrandPeople } from "@/lib/brands";
@@ -22,7 +23,8 @@ import {
   customerSponsor,
   fundingAskCopy,
   hasCompleteCostComponents,
-  winningSolution,
+  bookedSolutionTitles,
+  catalogSolutionById,
 } from "@/lib/session";
 
 function componentArithmetic(component: CostComponent) {
@@ -77,7 +79,10 @@ export default function ArtifactPage() {
 
   const actions = artifactActions(viewer.actor, qualified, graph.session.delivery);
   const limits = artifactLimitsCopy(graph);
-  const winner = winningSolution(graph);
+  const bookedTitles = bookedSolutionTitles(graph);
+  const bookedSolutions = (graph.hackathon?.solutionIds ?? [])
+    .map((id) => catalogSolutionById(id, graph))
+    .filter((solution): solution is NonNullable<typeof solution> => Boolean(solution));
 
   async function downloadPdf() {
     const artifact = document.getElementById("business-case");
@@ -154,23 +159,27 @@ export default function ArtifactPage() {
             Open pilot spec <ArrowRight />
           </Link>
         </div>
-        {graph.hackathon?.booked ? (
-          <div className="mx-auto mt-3 max-w-4xl rounded-sm border border-black/10 bg-[#fafaf8] px-4 py-3 text-sm text-black/70" role="status">
-            <p className="font-semibold text-black/80">Hackathon confirmed · {graph.hackathon.date}</p>
-            <p className="mt-1 leading-6">
-              {winner?.title ?? "Rank 1"} · {graph.hackathon.googleFacilitator} (Google) · {graph.hackathon.partnerSpecialist} (partner) · {graph.hackathon.customerOwner} (customer)
-            </p>
-            <p className="mt-1 text-xs text-black/48">{graph.hackathon.question}</p>
-          </div>
-        ) : !selfService && viewer.actor === "partner" ? (
-          <div className="mx-auto mt-3 flex max-w-4xl flex-wrap items-center justify-between gap-3 rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            <p>No hackathon booked yet. Rank the shortlist and put a date on the calendar before funding.</p>
-            <Link href="/rank" className={buttonVariants({ size: "sm", className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>
-              Rank and book <ArrowRight />
-            </Link>
-          </div>
-        ) : null}
       </div>
+
+      {graph.hackathon?.booked ? (
+        <div className="mx-auto mt-5 max-w-4xl space-y-4">
+          <div className="rounded-sm border border-black/20 bg-white px-4 py-4 text-sm text-black" role="status">
+            <p className="text-base font-semibold text-black">Hackathon confirmed · {graph.hackathon.date}</p>
+            <p className="mt-2 leading-6 text-black/85">
+              {bookedTitles.length ? bookedTitles.join(" · ") : "Three solutions"} · {graph.hackathon.googleFacilitator} (Google) · {graph.hackathon.partnerSpecialist} (partner) · {graph.hackathon.customerOwner} (customer)
+            </p>
+            <p className="mt-2 text-sm leading-6 text-black/75">{graph.hackathon.question}</p>
+          </div>
+          <GoogleHackathonStack graph={graph} />
+        </div>
+      ) : !selfService && viewer.actor === "partner" ? (
+        <div className="mx-auto mt-5 flex max-w-4xl flex-wrap items-center justify-between gap-3 rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p>No hackathon booked yet. Rank the shortlist and put a date on the calendar before funding.</p>
+          <Link href="/rank" className={buttonVariants({ size: "sm", className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>
+            Rank and book <ArrowRight />
+          </Link>
+        </div>
+      ) : null}
 
       <article id="business-case" className="mx-auto mt-5 max-w-4xl rounded-sm border border-black/10 bg-white">
         <header className="border-b border-black/10 p-7 md:p-10" style={{ borderTop: `5px solid ${brand.accent}` }}>
@@ -272,24 +281,30 @@ export default function ArtifactPage() {
             </p>
           </section>
 
-          {winner && (
+          {bookedSolutions.length > 0 && (
             <section>
-              <h3 className="text-lg font-semibold">The ranked solution</h3>
-              <p className="mt-3 text-xl font-semibold">{winner.title}</p>
-              <p className="mt-2 text-sm leading-6 text-black/62">{winner.outcome}</p>
-              <p className="mt-1 text-xs text-black/48">{winner.valueAnchor}</p>
-              {winner.products.length > 0 && (
-                <ul className="mt-2 flex flex-wrap gap-1.5" aria-label={`Products for ${winner.title}`}>
-                  {winner.products.map((product) => (
-                    <li
-                      key={product}
-                      className="rounded-sm border border-black/15 bg-[#fafaf8] px-2 py-0.5 text-xs text-black/65"
-                    >
-                      {product}
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <h3 className="text-lg font-semibold">The booked solutions</h3>
+              <ul className="mt-3 space-y-4">
+                {bookedSolutions.map((solution) => (
+                  <li key={solution.id}>
+                    <p className="text-xl font-semibold">{solution.title}</p>
+                    <p className="mt-2 text-sm leading-6 text-black/62">{solution.outcome}</p>
+                    <p className="mt-1 text-xs text-black/48">{solution.valueAnchor}</p>
+                    {solution.products.length > 0 && (
+                      <ul className="mt-2 flex flex-wrap gap-1.5" aria-label={`Products for ${solution.title}`}>
+                        {solution.products.map((product) => (
+                          <li
+                            key={product}
+                            className="rounded-sm border border-black/15 bg-[#fafaf8] px-2 py-0.5 text-xs text-black/65"
+                          >
+                            {product}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </section>
           )}
 
@@ -299,7 +314,7 @@ export default function ArtifactPage() {
               <dl className="mt-4 grid gap-px overflow-hidden rounded-sm border border-black/10 bg-black/10 sm:grid-cols-2">
                 {[
                   ["Date", graph.hackathon.date],
-                  ["Winning solution", winner?.title ?? "Rank 1"],
+                  ["Solutions", bookedTitles.join("; ") || "Three selected"],
                   ["Google facilitator", graph.hackathon.googleFacilitator],
                   ["Partner specialist", graph.hackathon.partnerSpecialist],
                   ["Customer owner", graph.hackathon.customerOwner],

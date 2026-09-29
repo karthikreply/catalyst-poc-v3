@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, BadgeDollarSign, ChartNoAxesCombined, CircleHelp, Presentation, Shapes } from "lucide-react";
 
 import { useSession } from "@/components/session-provider";
@@ -20,13 +22,21 @@ const entryDoors: { actor: Actor; title: string; tool: string; note?: string }[]
   {
     actor: "cpm",
     title: "Customer",
-    tool: "Opens from a trial or campaign journey.",
-    note: "Direct apply is uncommon in this motion.",
+    tool: "Opens from a campaign or trial. Look up your account, or add it.",
   },
 ];
 
 export default function Home() {
-  const { viewer, setActor } = useSession();
+  const { viewer, setActor, hydrated } = useSession();
+  const router = useRouter();
+  const customerViewer = viewer.actor === "cpm";
+
+  useEffect(() => {
+    if (hydrated && customerViewer) router.replace("/customer");
+  }, [hydrated, customerViewer, router]);
+
+  // The program dashboard is for the partner and the PDM. Nothing from it mounts for the customer.
+  if (!hydrated || customerViewer) return null;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-8 md:py-12">

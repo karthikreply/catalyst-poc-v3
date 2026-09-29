@@ -51,7 +51,7 @@ function useInteractiveSession() {
   };
 }
 
-function renderVendorScope(complete: boolean) {
+function renderCustomerScope(complete: boolean) {
   useSessionMock.mockReturnValue({
     graph: {
       ...initialSessionGraph,
@@ -61,8 +61,11 @@ function renderVendorScope(complete: boolean) {
         fundingRoute: complete ? "invite-karen" : null,
       },
     },
-    viewer: { actor: "cpm", name: "Casey", org: "Platform vendor" },
+    brand: { partnerName: "CDW" },
+    viewer: { actor: "cpm", name: "Casey", org: "Customer" },
     canEditSession: false,
+    setColdScope: vi.fn(),
+    restoreSeededScope: vi.fn(),
   });
 
   return renderToStaticMarkup(<ScopePage />);
@@ -94,21 +97,22 @@ function renderPartnerScope() {
   return renderToStaticMarkup(<ScopePage />);
 }
 
-describe("read-only vendor Scope navigation", () => {
-  it("shows disabled plan navigation until scope is complete", () => {
-    const markup = renderVendorScope(false);
+describe("customer door Scope", () => {
+  it("shows account lookup and keeps plan disabled until cold scope is complete", () => {
+    const markup = renderCustomerScope(false);
 
+    expect(markup).toContain("Customer entry");
+    expect(markup).toContain("Look up your account");
     expect(markup).toContain("Review session plan");
     expect(markup).toContain("disabled");
-    expect(markup).toContain("The session plan is available when scoping is complete.");
     expect(markup).not.toContain('href="/plan"');
+    expect(markup).not.toContain("Close date pushed");
   });
 
-  it("links to the plan when scope is complete without exposing edit controls", () => {
-    const markup = renderVendorScope(true);
+  it("does not expose partner CRM edit controls on the customer door", () => {
+    const markup = renderCustomerScope(true);
 
-    expect(markup).toContain('href="/plan"');
-    expect(markup).toContain("Scope complete.");
+    expect(markup).toContain("Customer entry");
     expect(markup).not.toContain("Start without the record");
     expect(markup).not.toContain("Use account record instead");
     expect(markup).not.toContain("Close date pushed");

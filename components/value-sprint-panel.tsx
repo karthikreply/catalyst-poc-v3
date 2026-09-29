@@ -88,7 +88,7 @@ export function ValueSprintPanel() {
             </InputRow>
           ))}
         </div>
-        {viewer.actor === "cpm" && (
+        {viewer.actor === "cpm" && !canEditSession && (
           <p className="mt-3 text-xs text-black/48">Completed-session evidence shared by the partner; editing remains partner-owned.</p>
         )}
       </div>

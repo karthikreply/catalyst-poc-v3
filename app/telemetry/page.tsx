@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 
 import { Switch } from "@/components/ui/switch";
@@ -54,9 +55,16 @@ function Breakdown({ title, rows, details }: { title: string; rows: [string, num
 }
 
 export default function TelemetryPage() {
-  const { graph, brand, viewer } = useSession();
+  const { graph, brand, viewer, hydrated } = useSession();
+  const router = useRouter();
   const [detail, setDetail] = useState(false);
   const showOpportunity = canViewOpportunityDetail(viewer.actor, detail);
+  const customerViewer = viewer.actor === "cpm";
+
+  useEffect(() => {
+    // Telemetry is program-level. The customer sees this engagement only.
+    if (hydrated && customerViewer) router.replace("/customer");
+  }, [hydrated, customerViewer, router]);
 
   const rows = useMemo(() => {
     const scoped = scopeTelemetry([...telemetrySeed], {
@@ -123,6 +131,8 @@ export default function TelemetryPage() {
     ...recentTelemetryRows(rows.filter((row) => row.id !== graph.session.id), 8),
   ];
   const teamThisQuarter = rows.filter((row) => row.quarter === "Q3 2026").length;
+
+  if (!hydrated || customerViewer) return null;
 
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-8 md:px-8">

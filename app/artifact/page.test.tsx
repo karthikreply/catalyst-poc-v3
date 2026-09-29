@@ -3,14 +3,31 @@ import { describe, expect, it, vi } from "vitest";
 
 import { brands } from "@/lib/brands";
 import { initialSessionGraph } from "@/lib/seed";
-import { applyClaimsVolumeChoice, applyCloseStyle, applyExactClaimsVolume, bookHackathon, lockRanking } from "@/lib/session";
+import {
+  applyClaimsVolumeChoice,
+  applyCloseStyle,
+  applyExactClaimsVolume,
+  bookHackathon,
+  rankedSolutions,
+  toggleSelected,
+} from "@/lib/session";
 
-const { useSessionMock } = vi.hoisted(() => ({
+function selectThree(graph = initialSessionGraph) {
+  const ids = rankedSolutions(graph).map((solution) => solution.id).slice(0, 3);
+  return ids.reduce((current, id) => toggleSelected(current, id), graph);
+}
+
+const { useSessionMock, useRouterMock } = vi.hoisted(() => ({
   useSessionMock: vi.fn(),
+  useRouterMock: vi.fn(() => ({ push: vi.fn() })),
 }));
 
 vi.mock("@/components/session-provider", () => ({
   useSession: useSessionMock,
+}));
+
+vi.mock("next/navigation", () => ({
+  useRouter: useRouterMock,
 }));
 
 vi.mock("html2canvas-pro", () => ({ default: vi.fn() }));
@@ -28,6 +45,7 @@ describe("exact claims provenance", () => {
       graph,
       brand: brands.cdw,
       viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      markHackathonCalendarAdded: vi.fn(),
     });
 
     const markup = renderToStaticMarkup(<ArtifactPage />);
@@ -54,6 +72,7 @@ describe("board-slide close", () => {
       graph,
       brand: brands.cdw,
       viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      markHackathonCalendarAdded: vi.fn(),
     });
     return renderToStaticMarkup(<ArtifactPage />);
   }
@@ -101,7 +120,7 @@ describe("board-slide close", () => {
   });
 
   it("shows hackathon confirmation when booked, and a Rank link when not", () => {
-    const booked = bookHackathon(lockRanking(initialSessionGraph), {
+    const booked = bookHackathon(selectThree(), {
       date: "2026-10-14",
       googleFacilitator: "Priya Raghavan",
       partnerSpecialist: "Ravi Menon",
@@ -111,10 +130,17 @@ describe("board-slide close", () => {
 
     expect(renderArtifact(booked)).toContain("Hackathon confirmed · 2026-10-14");
     expect(renderArtifact(booked)).toContain("Priya Raghavan (Google)");
+    expect(renderArtifact(booked)).toContain("Google stack for these three days");
+    expect(renderArtifact(booked)).toContain("Add to Google Calendar");
     expect(renderArtifact(booked)).not.toContain("Confirm hackathon capacity");
+    for (const id of booked.hackathon!.solutionIds) {
+      const title = initialSessionGraph.solutions.find((solution) => solution.id === id)?.title;
+      expect(renderArtifact(booked)).toContain(title!);
+    }
 
     expect(renderArtifact(initialSessionGraph)).toContain("No hackathon booked yet");
     expect(renderArtifact(initialSessionGraph)).toContain('href="/rank"');
+    expect(renderArtifact(initialSessionGraph)).toContain("Rank and book");
     expect(renderArtifact(initialSessionGraph)).not.toContain("Confirm hackathon capacity");
   });
 });

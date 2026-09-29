@@ -195,7 +195,11 @@ describe("board-slide close", () => {
 });
 
 describe("agenda step navigation", () => {
-  function mockAgendaAt(stepId: string, setActiveStep = vi.fn()) {
+  function mockAgendaAt(
+    stepId: string,
+    setActiveStep = vi.fn(),
+    extras: { canEditSession?: boolean; viewer?: { actor: string; name: string; org: string } } = {},
+  ) {
     useSessionMock.mockReturnValue({
       graph: {
         ...initialSessionGraph,
@@ -205,8 +209,8 @@ describe("agenda step navigation", () => {
         })),
       },
       brand: { partnerName: "CDW" },
-      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
-      canEditSession: true,
+      viewer: extras.viewer ?? { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      canEditSession: extras.canEditSession ?? true,
       addCapture: vi.fn(),
       updateCapture: vi.fn(),
       saveSessionOutcome: vi.fn(),
@@ -237,6 +241,48 @@ describe("agenda step navigation", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /Back to Volume and cost/i })[0]);
 
     expect(setActiveStep).toHaveBeenCalledWith("volume-and-cost");
+  });
+
+  it("still moves the agenda on a read-only session", () => {
+    const setActiveStep = mockAgendaAt("constraints", vi.fn(), {
+      canEditSession: false,
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+    });
+    render(<RunPage />);
+
+    expect(screen.getByText(/Historical session record/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Skip to rank" })).toHaveAttribute("href", "/rank");
+    fireEvent.click(screen.getAllByRole("button", { name: /Continue to Shape the pilot/i })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /Back to Volume and cost/i })[0]);
+
+    expect(setActiveStep).toHaveBeenCalledWith("shape-the-pilot");
+    expect(setActiveStep).toHaveBeenCalledWith("volume-and-cost");
+    expect(screen.queryByRole("button", { name: "Add capture" })).not.toBeInTheDocument();
+  });
+
+  it("shows the self-service line, not the historical banner, for an editable customer", () => {
+    useSessionMock.mockReturnValue({
+      graph: {
+        ...initialSessionGraph,
+        session: { ...initialSessionGraph.session, delivery: "self-service" },
+      },
+      brand: { partnerName: "CDW" },
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      canEditSession: true,
+      addCapture: vi.fn(),
+      updateCapture: vi.fn(),
+      saveSessionOutcome: vi.fn(),
+      setActiveStep: vi.fn(),
+      updateValue: vi.fn(),
+      updateValueConfirmer: vi.fn(),
+      updateCostInput: vi.fn(),
+      freezeLedgerNow: vi.fn(),
+    });
+    render(<RunPage />);
+
+    expect(screen.getByText(/Customer self-service/)).toBeInTheDocument();
+    expect(screen.queryByText(/Historical session record/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/editing remains partner-owned/)).not.toBeInTheDocument();
   });
 
   it("offers Rank solutions on the last step instead of Continue", () => {
