@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { brands } from "@/lib/brands";
+import { sampleClaims } from "@/lib/sample-claims";
 import { initialSessionGraph } from "@/lib/seed";
 import {
   applyColdScope,
@@ -10,9 +11,13 @@ import {
   bookedSolutionTitles,
   chooseCustomerFormat,
   coldScopeDefaults,
+  customerSampleRunLabel,
+  lockRanking,
+  markSampleClaim,
   rankedSolutions,
   recordHandoff,
   setPilotPick,
+  startSampleRun,
   toggleSelected,
 } from "@/lib/session";
 
@@ -263,5 +268,30 @@ describe("customer home", () => {
     expect(renderToStaticMarkup(<CustomerHomePage />)).not.toContain("What the three days will be.");
     mockGraph(booked, { actor: "pdm", name: "Priya Raghavan", org: "Google" });
     expect(renderToStaticMarkup(<CustomerHomePage />)).not.toContain("Start from the pain.");
+  });
+
+  it("adds a sample run row for the customer once the extraction solution is locked", () => {
+    const ids = rankedSolutions(initialSessionGraph).map((solution) => solution.id).slice(0, 3);
+    const locked = lockRanking(ids.reduce((current, id) => toggleSelected(current, id), initialSessionGraph));
+    mockGraph(locked);
+    const notRun = renderToStaticMarkup(<CustomerHomePage />);
+    expect(notRun).toContain("Sample run");
+    expect(notRun).toContain("Not run yet");
+    expect(notRun).toContain('href="/try"');
+    expect(customerSampleRunLabel(locked)).toBe("Not run yet");
+
+    const started = startSampleRun(locked, "partner", "Ravi Menon", "2026-10-01T00:00:00.000Z");
+    mockGraph(started);
+    expect(renderToStaticMarkup(<CustomerHomePage />)).toContain("In progress");
+
+    let reviewed = started;
+    for (const claim of sampleClaims) {
+      reviewed = markSampleClaim(reviewed, "partner", claim.id, "right", [], "Ravi Menon", "2026-10-01T00:00:00.000Z", true);
+    }
+    mockGraph(reviewed);
+    expect(renderToStaticMarkup(<CustomerHomePage />)).toContain("8 of 8 look right");
+
+    mockGraph(locked, { actor: "partner", name: "Ravi Menon", org: "CDW" });
+    expect(renderToStaticMarkup(<CustomerHomePage />)).not.toContain("Sample run");
   });
 });

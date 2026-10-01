@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { brands } from "./brands";
 import { freezeLedger, ledgerAnnualTotal } from "./cost-model";
+import { sampleClaims } from "./sample-claims";
 import { initialSessionGraph } from "./seed";
+import { buildTelemetrySessions, summarizeTelemetry } from "./telemetry";
 import {
   agendaForSession,
   applyClaimsVolumeChoice,
@@ -20,6 +22,7 @@ import {
   bindAnnualValue,
   chooseCustomerFormat,
   customerHasAccount,
+  sessionHasNamedCompany,
   customerHomeSummary,
   latestStepCapture,
   lockRanking,
@@ -55,7 +58,18 @@ import {
   missingColdRoles,
   isQualified,
   isCustomerAttending,
+  isCustomerViewer,
   isSessionReadOnly,
+  canMutateSampleRun,
+  customerSampleRunLabel,
+  documentExtractionSolution,
+  liveSampleRunFlag,
+  markSampleClaim,
+  rankOneSolutionId,
+  setSamplePosition,
+  showsTryItCard,
+  startOverSampleRun,
+  startSampleRun,
   pdmPartnerInvitationCopy,
   preworkForMechanic,
   restoreSeededGraph,
@@ -1083,6 +1097,15 @@ describe("customer home", () => {
     expect(customerHasAccount("cpm", blank)).toBe(false);
   });
 
+  it("treats a named company as on the session even when the scope is seeded", () => {
+    expect(sessionHasNamedCompany(initialSessionGraph)).toBe(true);
+    const named = applyColdScope(initialSessionGraph, { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees);
+    expect(sessionHasNamedCompany(named)).toBe(true);
+    const blank = applyColdScope(initialSessionGraph, { name: "  ", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees);
+    expect(sessionHasNamedCompany(blank)).toBe(false);
+    expect(customerHasAccount("cpm", initialSessionGraph)).toBe(false);
+  });
+
   it("treats the seeded facilitated graph as not started", () => {
     const summary = customerHomeSummary(initialSessionGraph, "CDW");
     expect(summary.started).toBe(false);
@@ -1369,3 +1392,173 @@ describe("ghost-ledger gate", () => {
     expect(door.session.delivery).toBe("self-service");
   });
 });
+
+describe("sample run", () => {
+  const at = "2026-10-01T12:00:00.000Z";
+
+  function credibility(graph: typeof initialSessionGraph) {
+    return {
+      annualValue: graph.outcome.annualValue,
+      outcome: graph.outcome,
+      valueInputs: graph.valueInputs,
+      captures: graph.captures,
+      costComponents: graph.costComponents,
+      hackathon: graph.hackathon,
+      fundingRoute: graph.session.fundingRoute,
+      qualified: graph.session.qualified,
+      votes: graph.votes,
+      partnerNotes: graph.partnerNotes,
+    };
+  }
+
+  it("resolves one document-extraction solution from the seed", () => {
+    const solution = documentExtractionSolution(initialSessionGraph);
+    expect(solution?.id).toBe("sol-intake-extraction");
+    expect(solution?.title).toBe("AI-assisted claims intake extraction");
+    expect(rankOneSolutionId(initialSessionGraph)).toBe("sol-intake-extraction");
+    const duplicated = {
+      ...initialSessionGraph,
+      solutions: initialSessionGraph.solutions.flatMap((item) => item.id === "sol-intake-extraction" ? [item, { ...item }] : [item]),
+    };
+    expect(documentExtractionSolution(duplicated)).toBeNull();
+  });
+
+  it("runs, marks, resumes, changes a mark, and starts over", () => {
+    const started = startSampleRun(initialSessionGraph, "partner", "Ravi Menon", at);
+    expect(started.sampleRun).toMatchObject({
+      solutionId: "sol-intake-extraction",
+      status: "ran",
+      position: 0,
+      reviewedBy: "Ravi Menon",
+      at,
+      marks: {},
+    });
+
+    const first = markSampleClaim(started, "partner", "claim-1", "right", [], "Ravi Menon", at, true);
+    expect(first.sampleRun?.position).toBe(1);
+    expect(first.sampleRun?.marks["claim-1"]).toEqual({ verdict: "right", fields: [] });
+
+    const parked = setSamplePosition(first, "partner", 4);
+    expect(parked.sampleRun?.position).toBe(4);
+
+    const changed = markSampleClaim(parked, "partner", "claim-1", "fix", ["dateOfLoss", "nope"], "Ravi Menon", at, false);
+    expect(changed.sampleRun?.position).toBe(4);
+    expect(changed.sampleRun?.marks["claim-1"]).toEqual({ verdict: "fix", fields: ["dateOfLoss"] });
+    expect(changed.sampleRun?.status).toBe("ran");
+
+    let reviewed = started;
+    sampleClaims.forEach((claim, index) => {
+      reviewed = markSampleClaim(
+        reviewed,
+        "partner",
+        claim.id,
+        index === 2 || index === 5 ? "fix" : "right",
+        index === 2 ? ["dateOfLoss"] : index === 5 ? ["policy"] : [],
+        "Ravi Menon",
+        at,
+        true,
+      );
+    });
+    expect(reviewed.sampleRun?.status).toBe("reviewed");
+    const marks = reviewed.sampleRun?.marks ?? {};
+    const right = Object.values(marks).filter((mark) => mark.verdict === "right").length;
+    const fix = Object.values(marks).filter((mark) => mark.verdict === "fix").length;
+    expect(right).toBe(6);
+    expect(fix).toBe(2);
+
+    expect(startOverSampleRun(reviewed, "partner").sampleRun).toBeNull();
+    expect(customerSampleRunLabel(startOverSampleRun(lockRanking(selectSample(reviewed)), "partner"))).toBe("Not run yet");
+  });
+
+  it("nulls the sample run when cold scope is entered", () => {
+    const started = startSampleRun(initialSessionGraph, "partner", "Ravi Menon", at);
+    const cold = applyColdScope(started, coldScopeDefaults.company, coldScopeDefaults.attendees);
+    expect(cold.sampleRun).toBeNull();
+    expect(cold.hackathon).toBeNull();
+    expect(cold.outcome.pilotPick).toBeNull();
+
+    const rerun = startSampleRun(cold, "partner", "Ravi Menon", at);
+    const again = applyColdScope(rerun, coldScopeDefaults.company, coldScopeDefaults.attendees);
+    expect(again.sampleRun?.status).toBe("ran");
+  });
+
+  it("leaves value, evidence, and pilot counts unchanged", () => {
+    const before = credibility(initialSessionGraph);
+    const telemetryBefore = summarizeTelemetry(buildTelemetrySessions());
+    const started = startSampleRun(initialSessionGraph, "partner", "Ravi Menon", at);
+    const marked = markSampleClaim(started, "partner", "claim-1", "fix", ["policy"], "Ravi Menon", at, true);
+    const cleared = startOverSampleRun(marked, "partner");
+
+    expect(started.sampleRun?.status).toBe("ran");
+    expect(credibility(started)).toEqual(before);
+    expect(credibility(marked)).toEqual(before);
+    expect(credibility(cleared)).toEqual(before);
+    expect(summarizeTelemetry(buildTelemetrySessions())).toEqual(telemetryBefore);
+    expect(telemetryBefore.hackathonsBooked).toBe(buildTelemetrySessions().filter((row) => row.converted).length);
+    expect(telemetryBefore.pilotsSigned).toBe(buildTelemetrySessions().filter((row) => row.outcome === "Pilot signed").length);
+  });
+
+  it("guards marks by role", () => {
+    expect(isCustomerViewer("cpm")).toBe(true);
+    expect(isCustomerViewer("partner")).toBe(false);
+    expect(isCustomerViewer("pdm")).toBe(false);
+    expect(canMutateSampleRun("partner", initialSessionGraph)).toBe(true);
+    expect(canMutateSampleRun("pdm", initialSessionGraph)).toBe(false);
+    expect(canMutateSampleRun("cpm", initialSessionGraph)).toBe(false);
+    expect(canMutateSampleRun("cpm", applyDeliveryMode(initialSessionGraph, "self-service"))).toBe(true);
+
+    const door = { ...initialSessionGraph, session: { ...initialSessionGraph.session, customerDoor: true } };
+    expect(canMutateSampleRun("partner", door)).toBe(false);
+    expect(canMutateSampleRun("partner", applyDeliveryMode(initialSessionGraph, "self-service"))).toBe(false);
+    expect(canMutateSampleRun("partner", applyDeliveryMode(initialSessionGraph, "google-facilitated"))).toBe(false);
+
+    const started = startSampleRun(initialSessionGraph, "partner", "Ravi Menon", at);
+    expect(markSampleClaim(started, "cpm", "claim-1", "right", [], "Marcus Hale", at)).toBe(started);
+    expect(markSampleClaim(started, "pdm", "claim-1", "right", [], "Priya Raghavan", at)).toBe(started);
+    expect(startSampleRun(initialSessionGraph, "pdm", "Priya Raghavan", at)).toBe(initialSessionGraph);
+    expect(startSampleRun(door, "partner", "Ravi Menon", at)).toBe(door);
+  });
+
+  it("drops a stale run when rank 1 changes and keeps it when the same solution stays first", () => {
+    const started = startSampleRun(initialSessionGraph, "partner", "Ravi Menon", at);
+    const locked = lockRanking(selectSample(started));
+    expect(unlockRanking(locked).sampleRun?.solutionId).toBe("sol-intake-extraction");
+
+    const moved = moveSolution(started, "sol-intake-extraction", "down");
+    expect(rankOneSolutionId(moved)).not.toBe("sol-intake-extraction");
+    expect(moved.sampleRun).toBeNull();
+    expect(showsTryItCard(lockRanking(selectSample(moved)))).toBe(false);
+    expect(showsTryItCard(locked)).toBe(true);
+  });
+
+  it("hydrates a missing sample run as null", () => {
+    const stored = JSON.parse(JSON.stringify(initialSessionGraph)) as typeof initialSessionGraph;
+    delete (stored as { sampleRun?: unknown }).sampleRun;
+    expect(hydrateSessionGraph(stored).sampleRun).toBeNull();
+
+    const started = startSampleRun(initialSessionGraph, "partner", "Ravi Menon", at);
+    const roundTrip = hydrateSessionGraph(JSON.parse(JSON.stringify(started)));
+    expect(roundTrip.sampleRun).toEqual(started.sampleRun);
+
+    const partial = hydrateSessionGraph({
+      ...initialSessionGraph,
+      sampleRun: {
+        solutionId: "sol-intake-extraction",
+        status: "reviewed",
+        marks: { "claim-1": { verdict: "right", fields: [] } },
+        position: 3,
+        reviewedBy: "Ravi Menon",
+        at,
+      },
+    });
+    expect(partial.sampleRun?.status).toBe("ran");
+    expect(partial.sampleRun?.position).toBe(3);
+    expect(liveSampleRunFlag(started)).toBe(true);
+    expect(liveSampleRunFlag(initialSessionGraph)).toBe(false);
+  });
+});
+
+function selectSample(graph: typeof initialSessionGraph) {
+  const ids = rankedSolutions(graph).map((solution) => solution.id).slice(0, 3);
+  return ids.reduce((current, id) => toggleSelected(current, id), graph);
+}

@@ -31,21 +31,26 @@ const navIcons: Record<VendorNavItem["label"], typeof LayoutDashboard> = {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { viewer, setActor } = useSession();
+  const { viewer, setActor, hydrated } = useSession();
   const breadcrumbs = breadcrumbForPath(pathname, viewer.actor);
   const brandFlow = isBrandFlowPath(pathname, viewer.actor);
   const navItems = navItemsForActor(viewer.actor);
 
   function onViewerChange(next: Actor) {
+    if (next === viewer.actor) return;
     setActor(next);
     // This dropdown is the only control that navigates when the viewer changes.
     router.push(next === "cpm" ? "/customer" : "/sessions");
   }
 
+  // The stored viewer is unknown until hydration. Painting the partner default
+  // mounts the dropdown on "partner" and links the wordmark at the partner dashboard.
+  if (!hydrated) return null;
+
   return (
     <div className="md-shell">
       <header className="md-top-app-bar sticky top-0 z-50 flex h-16 items-center gap-4 px-4 md:px-6">
-        <Link href="/" className="flex items-center gap-3 rounded-[var(--md-sys-shape-small)]">
+        <Link href={viewer.actor === "cpm" ? "/customer" : "/"} className="flex items-center gap-3 rounded-[var(--md-sys-shape-small)]">
           <span className="md-label-large grid size-10 place-items-center rounded-[var(--md-sys-shape-large)] bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)]">PN</span>
           <span>
             <span className="md-title-medium block">Partner network</span>

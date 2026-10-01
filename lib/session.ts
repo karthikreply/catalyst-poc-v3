@@ -19,10 +19,12 @@ import {
   type HandoffKind,
   type Mechanic,
   type PartnerNote,
+  type SampleRun,
   type Session,
   type SessionGraph,
   type SolutionCandidate,
 } from "./seed";
+import { isSampleClaimId, nextUnmarkedIndex, sampleClaimFields, sampleClaims, sampleRunTallies } from "./sample-claims";
 import { calculateAnnualValue, calculateDailyValue, formatCurrency, formatPreciseCurrency } from "./value";
 
 export type Viewer = { actor: Actor; name: string; org: string };
@@ -236,6 +238,46 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
         }
       : null,
     votes: value.votes && typeof value.votes === "object" ? value.votes : {},
+    sampleRun: hydrateSampleRun(value.sampleRun),
+  };
+}
+
+const sampleFieldIds = new Set<string>(sampleClaimFields.map((field) => field.id));
+
+function hydrateSampleRun(value: unknown): SampleRun | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<SampleRun>;
+  if (typeof candidate.solutionId !== "string" || !candidate.solutionId.trim()) return null;
+  const marks: SampleRun["marks"] = {};
+  if (candidate.marks && typeof candidate.marks === "object") {
+    for (const [claimId, mark] of Object.entries(candidate.marks)) {
+      if (!mark || typeof mark !== "object") continue;
+      const verdict = mark.verdict === "right" || mark.verdict === "fix" ? mark.verdict : null;
+      if (!verdict) continue;
+      const fields = verdict === "right" || !Array.isArray(mark.fields)
+        ? []
+        : mark.fields.filter((field): field is string => typeof field === "string" && sampleFieldIds.has(field));
+      marks[claimId] = { verdict, fields };
+    }
+  }
+  const { reviewed } = sampleRunTallies(marks);
+  let status: SampleRun["status"];
+  if (reviewed >= sampleClaims.length) status = "reviewed";
+  else if (reviewed > 0 || candidate.status === "ran" || candidate.status === "reviewed") status = "ran";
+  else status = "not-run";
+  const position = typeof candidate.position === "number"
+    && Number.isInteger(candidate.position)
+    && candidate.position >= 0
+    && candidate.position < sampleClaims.length
+    ? candidate.position
+    : 0;
+  return {
+    solutionId: candidate.solutionId,
+    status,
+    marks,
+    position,
+    reviewedBy: typeof candidate.reviewedBy === "string" ? candidate.reviewedBy : null,
+    at: typeof candidate.at === "string" ? candidate.at : null,
   };
 }
 
@@ -313,6 +355,7 @@ export function applyColdScope(
       : graph.ranking,
     hackathon: enteringCold ? null : graph.hackathon,
     votes: enteringCold ? {} : graph.votes,
+    sampleRun: enteringCold ? null : graph.sampleRun ?? null,
   };
 }
 
@@ -460,13 +503,13 @@ export function applyMechanic(graph: SessionGraph, mechanic: Mechanic): SessionG
     session: { ...graph.session, mechanic, ledgerFrozen: false },
   });
   const allowed = new Set(solutionIdsForMechanic(mechanic));
-  return {
+  return releaseStaleSampleRun({
     ...next,
     ranking: {
       ...next.ranking,
       selected: next.ranking.selected.filter((id) => allowed.has(id)),
     },
-  };
+  });
 }
 
 /** Customer door: choosing a format starts the customer's own session on the one graph. */
@@ -509,6 +552,11 @@ export type CustomerHomeSummary = {
 /** The customer has named a company in cold scope. A seeded graph is not their account. */
 export function customerHasAccount(actor: Actor, graph: SessionGraph) {
   return actor === "cpm" && graph.session.scopeMode === "cold" && graph.session.customerName.trim().length > 0;
+}
+
+/** Company name already on this session. Seeded Heartland counts; a blank cold start does not. */
+export function sessionHasNamedCompany(graph: SessionGraph) {
+  return graph.session.customerName.trim().length > 0;
 }
 
 /** This engagement only. Never treats the seeded Heartland graph as the customer's session. */
@@ -622,10 +670,29 @@ export function viewerForActor(actor: Actor, brand: Brand): Viewer {
   return { actor, name: "Ravi Menon", org: brand.partnerName };
 }
 
+export function isCustomerViewer(actor: Actor) {
+  return actor === "cpm";
+}
+
 export function isSessionReadOnly(actor: Actor, graph: SessionGraph) {
-  if (actor !== "cpm") return false;
+  if (!isCustomerViewer(actor)) return false;
   // Customer can run a self-service or cold session. A facilitated Heartland record stays the partner's evidence.
   return graph.session.delivery !== "self-service" && graph.session.scopeMode !== "cold";
+}
+
+/** Customer edits when the session is not read-only. Partner edits a facilitated session that is not the customer door. */
+export function canMutateSampleRun(actor: Actor, graph: SessionGraph) {
+  if (actor === "pdm") return false;
+  if (isCustomerViewer(actor)) return !isSessionReadOnly(actor, graph);
+  return actor === "partner" && graph.session.delivery === "facilitated" && graph.session.customerDoor !== true;
+}
+
+/** Read-only customers can still move between claims. The partner status panel and the PDM do not. */
+export function canSetSamplePosition(actor: Actor, graph: SessionGraph) {
+  if (!graph.sampleRun) return false;
+  if (actor === "pdm") return false;
+  if (actor === "partner") return canMutateSampleRun(actor, graph);
+  return isCustomerViewer(actor);
 }
 
 /** Partner-led session the customer is sitting in. The Customer card opens the door instead. */
@@ -1099,22 +1166,22 @@ export function toggleSelected(graph: SessionGraph, solutionId: string): Session
   if (!graph.ranking.order.includes(solutionId)) return graph;
   const selected = graph.ranking.selected;
   if (selected.includes(solutionId)) {
-    return {
+    return releaseStaleSampleRun({
       ...graph,
       ranking: {
         ...graph.ranking,
         selected: selected.filter((id) => id !== solutionId),
       },
-    };
+    });
   }
   if (selected.length >= 3) return graph;
-  return {
+  return releaseStaleSampleRun({
     ...graph,
     ranking: {
       ...graph.ranking,
       selected: [...selected, solutionId],
     },
-  };
+  });
 }
 
 export function castVote(graph: SessionGraph, attendeeId: string, solutionId: string): SessionGraph {
@@ -1186,7 +1253,7 @@ export function reorderSolutions(graph: SessionGraph, order: string[]): SessionG
   if (graph.ranking.locked || graph.hackathon?.booked) return graph;
   const validIds = new Set(graph.solutions.map((solution) => solution.id));
   if (order.length !== graph.solutions.length || order.some((id) => !validIds.has(id))) return graph;
-  return { ...graph, ranking: { ...graph.ranking, order: [...order] } };
+  return releaseStaleSampleRun({ ...graph, ranking: { ...graph.ranking, order: [...order] } });
 }
 
 export function moveSolution(graph: SessionGraph, solutionId: string, direction: "up" | "down"): SessionGraph {
@@ -1215,11 +1282,124 @@ export function lockRanking(graph: SessionGraph): SessionGraph {
 
 export function unlockRanking(graph: SessionGraph): SessionGraph {
   if (graph.hackathon?.booked) return graph;
-  return {
+  return releaseStaleSampleRun({
     ...graph,
     ranking: { ...graph.ranking, locked: false },
     hackathon: null,
+  });
+}
+
+/** First solution in ranking order for this format. The rank screen numbers rows the same way. */
+export function rankOneSolutionId(graph: SessionGraph): string | null {
+  const allowed = new Set(solutionIdsForMechanic(graph.session.mechanic));
+  return graph.ranking.order.find((id) => allowed.has(id)) ?? null;
+}
+
+/**
+ * The seeded claims-intake extraction solution, looked up by its existing id.
+ * Null when that id is missing or no longer a single solution.
+ */
+export function documentExtractionSolution(graph: SessionGraph): SolutionCandidate | null {
+  const matches = withSolutionProducts(graph.solutions).filter((solution) => solution.id === "sol-intake-extraction");
+  return matches.length === 1 ? matches[0] : null;
+}
+
+export function sampleRunSolutionReady(graph: SessionGraph) {
+  const solution = documentExtractionSolution(graph);
+  return Boolean(solution && rankOneSolutionId(graph) === solution.id);
+}
+
+export function showsTryItCard(graph: SessionGraph) {
+  return graph.ranking.locked && sampleRunSolutionReady(graph);
+}
+
+export function sampleRunHasStarted(graph: SessionGraph) {
+  const status = graph.sampleRun?.status;
+  return status === "ran" || status === "reviewed";
+}
+
+export function liveSampleRunFlag(graph: SessionGraph) {
+  const run = graph.sampleRun;
+  if (!run || !sampleRunHasStarted(graph)) return false;
+  return run.solutionId === rankOneSolutionId(graph);
+}
+
+export function customerSampleRunLabel(graph: SessionGraph): string | null {
+  if (!showsTryItCard(graph) && !sampleRunHasStarted(graph)) return null;
+  if (!graph.sampleRun || !sampleRunHasStarted(graph)) return "Not run yet";
+  if (graph.sampleRun.status === "reviewed") {
+    return `${sampleRunTallies(graph.sampleRun.marks).right} of 8 look right`;
+  }
+  return "In progress";
+}
+
+export function releaseStaleSampleRun(graph: SessionGraph): SessionGraph {
+  if (!graph.sampleRun) return graph;
+  if (graph.sampleRun.solutionId === rankOneSolutionId(graph)) return graph;
+  return { ...graph, sampleRun: null };
+}
+
+export function startSampleRun(graph: SessionGraph, actor: Actor, reviewerName: string, at: string): SessionGraph {
+  if (!canMutateSampleRun(actor, graph)) return graph;
+  const solution = documentExtractionSolution(graph);
+  if (!solution || rankOneSolutionId(graph) !== solution.id) return graph;
+  return {
+    ...graph,
+    sampleRun: {
+      solutionId: solution.id,
+      status: "ran",
+      marks: {},
+      position: 0,
+      reviewedBy: reviewerName,
+      at,
+    },
   };
+}
+
+export function markSampleClaim(
+  graph: SessionGraph,
+  actor: Actor,
+  claimId: string,
+  verdict: "right" | "fix",
+  fields: string[],
+  reviewerName: string,
+  at: string,
+  advance = true,
+): SessionGraph {
+  if (!canMutateSampleRun(actor, graph) || !graph.sampleRun) return graph;
+  if (!sampleRunHasStarted(graph)) return graph;
+  if (graph.sampleRun.solutionId !== rankOneSolutionId(graph)) return graph;
+  if (!isSampleClaimId(claimId)) return graph;
+  const cleanFields = verdict === "right"
+    ? []
+    : [...new Set(fields.filter((field) => sampleFieldIds.has(field)))];
+  const marks = { ...graph.sampleRun.marks, [claimId]: { verdict, fields: cleanFields } };
+  const fromIndex = sampleClaims.findIndex((claim) => claim.id === claimId);
+  const position = advance
+    ? nextUnmarkedIndex(marks, fromIndex < 0 ? graph.sampleRun.position : fromIndex)
+    : graph.sampleRun.position;
+  return {
+    ...graph,
+    sampleRun: {
+      ...graph.sampleRun,
+      status: sampleRunTallies(marks).reviewed >= sampleClaims.length ? "reviewed" : "ran",
+      marks,
+      position,
+      reviewedBy: reviewerName,
+      at,
+    },
+  };
+}
+
+export function setSamplePosition(graph: SessionGraph, actor: Actor, position: number): SessionGraph {
+  if (!canSetSamplePosition(actor, graph) || !graph.sampleRun) return graph;
+  if (!Number.isInteger(position) || position < 0 || position >= sampleClaims.length) return graph;
+  return { ...graph, sampleRun: { ...graph.sampleRun, position } };
+}
+
+export function startOverSampleRun(graph: SessionGraph, actor: Actor): SessionGraph {
+  if (!canMutateSampleRun(actor, graph) || !graph.sampleRun) return graph;
+  return { ...graph, sampleRun: null };
 }
 
 export function defaultHackathonDraft(graph: SessionGraph): HackathonBooking {

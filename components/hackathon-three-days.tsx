@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { UnavailableControl } from "@/components/unavailable-control";
 import { SolutionProductList, ThreeDayShapeList } from "@/components/what-the-three-days-will-be";
 import type { SessionGraph } from "@/lib/seed";
-import { bookedSolutionPains, canBookHackathon, catalogSolutionById, pilotPickTitle, showcaseLabel } from "@/lib/session";
+import { bookedSolutionPains, canBookHackathon, catalogSolutionById, isSessionReadOnly, pilotPickTitle, showcaseLabel } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 /** Booked three days: the solutions and what the days will be, then the date, showcase, and pilot choice. */
@@ -15,7 +15,7 @@ export function HackathonThreeDays({ graph, className }: { graph: SessionGraph; 
   const { viewer, brand, setPilotPick } = useSession();
   if (!graph.hackathon?.booked) return null;
   const rows = bookedSolutionPains(graph);
-  const mayPick = canBookHackathon(viewer.actor);
+  const mayPick = canBookHackathon(viewer.actor) && !isSessionReadOnly(viewer.actor, graph);
   const pick = graph.outcome.pilotPick;
   const pickedTitle = pilotPickTitle(graph);
   const showcase = graph.hackathon.showcaseAt ? showcaseLabel(graph.hackathon.showcaseAt) : "Not set";

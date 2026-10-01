@@ -28,8 +28,24 @@ describe("pilot spec", () => {
     expect(markup).not.toContain("View program telemetry");
     expect(markup).not.toContain("View telemetry");
     expect(markup).not.toContain('href="/telemetry"');
+    expect(markup).not.toContain("This is written once your account is in the session.");
+    expect(markup).toContain("What the funded pilot consists of");
+    expect(markup).toContain("Heartland Mutual Insurance");
+  });
+
+  it("keeps the pending sentence when the session has no company name", () => {
+    useSessionMock.mockReturnValue({
+      graph: {
+        ...initialSessionGraph,
+        session: { ...initialSessionGraph.session, scopeMode: "cold", customerName: "" },
+      },
+      brand: brands.cdw,
+      viewer: { actor: "cpm", name: "Someone", org: "Org" },
+    });
+    const markup = renderToStaticMarkup(<PilotSpecPage />);
     expect(markup).toContain("This is written once your account is in the session.");
-    expect(markup).not.toContain("Heartland");
+    expect(markup).toContain('href="/scope"');
+    expect(markup).not.toContain("What the funded pilot consists of");
   });
 
   it("keeps View telemetry for the partner", () => {

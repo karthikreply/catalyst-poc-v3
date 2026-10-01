@@ -8,13 +8,15 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/components/session-provider";
 import { patterns } from "@/lib/seed";
-import { hasCompleteCostComponents, hasCompleteValueInputs } from "@/lib/session";
+import { hasCompleteCostComponents, hasCompleteValueInputs, liveSampleRunFlag } from "@/lib/session";
 import {
   canViewOpportunityDetail,
   isBookedOutcome,
   liveSessionOutcome,
   mechanicConversion,
   recentTelemetryRows,
+  sampleRunBookingSummary,
+  sampleRunColumnLabel,
   scopeTelemetry,
   summarizeTelemetry,
   telemetrySeed,
@@ -95,6 +97,7 @@ export default function TelemetryPage() {
       converted: Boolean(graph.hackathon?.booked),
       fundingClaimSubmitted: false,
       daysToFunded: null,
+      sampleRun: liveSampleRunFlag(graph),
     };
     return [...scoped.filter((row) => row.id !== overlay.id), overlay];
   }, [graph, brand.partnerName, viewer.actor]);
@@ -125,6 +128,7 @@ export default function TelemetryPage() {
     "Value sprint": `${valueSprintConversion.funded} booked of ${valueSprintConversion.total} · ${valueSprintConversion.rate}% conversion`,
     "Ghost ledger": `${ghostLedgerConversion.funded} booked of ${ghostLedgerConversion.total} · ${ghostLedgerConversion.rate}% conversion`,
   };
+  const sampleBooking = sampleRunBookingSummary(rows);
   const overlayRow = rows.find((row) => row.id === graph.session.id);
   const recent = [
     ...(overlayRow ? [overlayRow] : []),
@@ -198,6 +202,9 @@ export default function TelemetryPage() {
             </div>
           ))}
         </div>
+        <p className="md-body-medium mt-4 text-[var(--md-sys-color-on-surface-variant)]">
+          Booked after a sample run: {sampleBooking.bookedAfter} of {sampleBooking.ran} that ran one
+        </p>
       </section>
 
       <section className="md-card-outlined mt-5 overflow-hidden">
@@ -207,7 +214,7 @@ export default function TelemetryPage() {
         </div>
         <div className="overflow-x-auto">
           <table className="md-body-medium w-full min-w-[980px] text-left">
-            <thead className="md-label-medium bg-[var(--md-sys-color-surface-container)] text-[var(--md-sys-color-on-surface-variant)]"><tr>{detail && <th className="px-5 py-3 font-medium">Customer</th>}<th className="px-5 py-3 font-medium">Partner</th><th className="px-5 py-3 font-medium">Industry segment</th><th className="px-5 py-3 font-medium">Pattern</th><th className="px-5 py-3 font-medium">Who ran it</th><th className="px-5 py-3 font-medium">Format</th><th className="px-5 py-3 font-medium">Close style</th><th className="px-5 py-3 font-medium">Qualification</th><th className="px-5 py-3 font-medium">Outcome</th>{showOpportunity && <th className="px-5 py-3 font-medium">Opportunity</th>}<th className="px-5 py-3 font-medium">Quarter</th></tr></thead>
+            <thead className="md-label-medium bg-[var(--md-sys-color-surface-container)] text-[var(--md-sys-color-on-surface-variant)]"><tr>{detail && <th className="px-5 py-3 font-medium">Customer</th>}<th className="px-5 py-3 font-medium">Partner</th><th className="px-5 py-3 font-medium">Industry segment</th><th className="px-5 py-3 font-medium">Pattern</th><th className="px-5 py-3 font-medium">Who ran it</th><th className="px-5 py-3 font-medium">Format</th><th className="px-5 py-3 font-medium">Close style</th><th className="px-5 py-3 font-medium">Qualification</th><th className="px-5 py-3 font-medium">Outcome</th><th className="px-5 py-3 font-medium">Sample run</th>{showOpportunity && <th className="px-5 py-3 font-medium">Opportunity</th>}<th className="px-5 py-3 font-medium">Quarter</th></tr></thead>
             <tbody className="divide-y divide-[var(--md-sys-color-outline-variant)]">
               {recent.map((row) => (
                 <tr key={row.id} className={row.id === graph.session.id ? "bg-[var(--md-sys-color-primary-container)]" : "hover:bg-[color-mix(in_srgb,var(--md-sys-color-primary)_5%,transparent)]"}>
@@ -220,6 +227,7 @@ export default function TelemetryPage() {
                   <td className="px-5 py-4">{row.closeStyle === "board-slide" ? "Board slide" : "Owner and ask"}</td>
                   <td className="px-5 py-4">{row.delivery === "facilitated" ? "—" : row.qualified ? "Qualified" : "Not qualified"}</td>
                   <td className="px-5 py-4"><OutcomeStatus outcome={row.outcome} /></td>
+                  <td className="px-5 py-4">{sampleRunColumnLabel(row.sampleRun)}</td>
                   {showOpportunity && <td className="px-5 py-4 font-medium">{row.opportunityValue ? formatCompactCurrency(row.opportunityValue) : "—"}</td>}
                   <td className="px-5 py-4 text-[var(--md-sys-color-on-surface-variant)]">{row.quarter}</td>
                 </tr>

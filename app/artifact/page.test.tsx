@@ -40,9 +40,12 @@ vi.mock("jspdf", () => ({ default: vi.fn() }));
 import ArtifactPage from "./page";
 
 describe("customer without an account", () => {
-  it("does not render the seeded Heartland case", () => {
+  it("keeps the pending sentence when the session has no company name", () => {
     useSessionMock.mockReturnValue({
-      graph: initialSessionGraph,
+      graph: {
+        ...initialSessionGraph,
+        session: { ...initialSessionGraph.session, scopeMode: "cold", customerName: "  " },
+      },
       brand: brands.cdw,
       viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
       markHackathonCalendarAdded: vi.fn(),
@@ -51,6 +54,40 @@ describe("customer without an account", () => {
     expect(markup).toContain("This is written once your account is in the session.");
     expect(markup).toContain('href="/scope"');
     expect(markup).not.toContain("Heartland");
+    expect(markup).not.toContain("Open pilot spec");
+  });
+
+  it("shows the booked Heartland case and the next actions to a seeded named customer", () => {
+    const booked = bookHackathon(selectThree(), {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Dana Reyes",
+      question: "Can we prove extraction on Heartland forms?",
+    });
+    useSessionMock.mockReturnValue({
+      graph: booked,
+      brand: brands.cdw,
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      canEditSession: false,
+      bookHackathon: vi.fn(),
+      setPilotPick: vi.fn(),
+      markHackathonCalendarAdded: vi.fn(),
+      markHackathonMeetAdded: vi.fn(),
+    });
+    const markup = renderToStaticMarkup(<ArtifactPage />);
+    expect(booked.session.scopeMode).toBe("seeded");
+    expect(booked.session.customerName).toBe("Heartland Mutual Insurance");
+    expect(markup).not.toContain("This is written once your account is in the session.");
+    expect(markup).toContain("Hackathon confirmed · 2026-10-14");
+    expect(markup).toContain("What the three days will be.");
+    expect(markup).toContain("Which one becomes the pilot?");
+    expect(markup).toContain("Pilot not yet chosen. The room names it at the showcase.");
+    expect(markup).not.toContain("as the pilot");
+    expect(markup).toContain("Open pilot spec");
+    expect(markup).toContain("Add to Google Calendar");
+    expect(markup).not.toContain("Review funding request");
+    expect(markup).not.toContain('href="/funding"');
   });
 
   it("does not offer a funding request once the account is in the session", () => {

@@ -33,6 +33,8 @@ export type TelemetrySession = {
   converted: boolean;
   fundingClaimSubmitted: boolean;
   daysToFunded: number | null;
+  /** Deterministic cohort flag. Independent of hackathon and pilot counts. */
+  sampleRun: boolean;
 };
 
 export function canViewOpportunityDetail(actor: Actor, detail: boolean) {
@@ -96,6 +98,7 @@ function row(
     converted,
     fundingClaimSubmitted: converted,
     daysToFunded: converted ? 21 + (index % 40) : null,
+    sampleRun: index % 5 === 0,
   };
 }
 
@@ -161,6 +164,19 @@ export function summarizeTelemetry(rows: TelemetrySession[]) {
     pilotsSigned: rows.filter((item) => item.outcome === "Pilot signed").length,
     fundedPipelineValue: rows.reduce((sum, item) => sum + item.fundedValue, 0),
   };
+}
+
+/** Booked rows among those that ran a sample. Pilot signed counts as booked. */
+export function sampleRunBookingSummary(rows: Pick<TelemetrySession, "sampleRun" | "outcome">[]) {
+  const ran = rows.filter((row) => row.sampleRun);
+  return {
+    ran: ran.length,
+    bookedAfter: ran.filter((row) => isBookedOutcome(row.outcome)).length,
+  };
+}
+
+export function sampleRunColumnLabel(sampleRun: boolean) {
+  return sampleRun ? "Yes" : "—";
 }
 
 export function recentTelemetryRows(rows: TelemetrySession[], limit = 8) {

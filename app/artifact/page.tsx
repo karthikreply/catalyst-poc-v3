@@ -29,7 +29,7 @@ import {
   bookedSolutionTitles,
   canBookHackathon,
   catalogSolutionById,
-  customerHasAccount,
+  sessionHasNamedCompany,
   pilotNextStepCopy,
   pilotPickTitle,
   selectedSolutions,
@@ -60,7 +60,7 @@ function componentArithmetic(component: CostComponent) {
 
 export default function ArtifactPage() {
   const { graph, brand, viewer, canEditSession, bookHackathon } = useSession();
-  if (viewer.actor === "cpm" && !customerHasAccount(viewer.actor, graph)) {
+  if (viewer.actor === "cpm" && !sessionHasNamedCompany(graph)) {
     return <CustomerAccountPending message="This is written once your account is in the session." />;
   }
   const people = withBrandPeople(brand);

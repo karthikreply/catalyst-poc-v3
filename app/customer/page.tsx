@@ -12,9 +12,11 @@ import {
   customerFormatLabels,
   customerHasAccount,
   customerHomeSummary,
+  customerSampleRunLabel,
   googleCalendarComposeUrl,
   handoffLabel,
   isCustomerAttending,
+  isCustomerViewer,
 } from "@/lib/session";
 import { formatCurrency } from "@/lib/value";
 
@@ -32,6 +34,7 @@ export default function CustomerHomePage() {
   // Partner-led, and not the Customer card: attend the session. The card opens the format door.
   const attending = isCustomerAttending(viewer.actor, graph);
   const handoff = handoffLabel(graph.session.handoff);
+  const sampleRunLabel = isCustomerViewer(viewer.actor) ? customerSampleRunLabel(graph) : null;
 
   if (viewer.actor !== "cpm") {
     return (
@@ -62,6 +65,7 @@ export default function CustomerHomePage() {
             <SummaryItem term="Stage" detail={activeStep ? activeStep.title : "Underway"} />
             <SummaryItem term="Partner of record" detail={brand.partnerName} />
             <SummaryItem term="Handoff" detail={handoff} />
+            {sampleRunLabel && <SummaryItem term="Sample run" detail={sampleRunLabel} href="/try" />}
           </dl>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link href="/run" className="md-button-filled">
@@ -142,6 +146,7 @@ export default function CustomerHomePage() {
           )}
           <SummaryItem term="Funding" detail={summary.funding} />
           <SummaryItem term="Handoff" detail={handoff} />
+          {sampleRunLabel && <SummaryItem term="Sample run" detail={sampleRunLabel} href="/try" />}
         </dl>
         {(summary.continueHref || hasAccount) && (
           <div className="mt-6 flex flex-wrap gap-3">
@@ -185,11 +190,15 @@ export default function CustomerHomePage() {
   );
 }
 
-function SummaryItem({ term, detail }: { term: string; detail: string }) {
+function SummaryItem({ term, detail, href }: { term: string; detail: string; href?: string }) {
   return (
     <div>
       <dt className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">{term}</dt>
-      <dd className="md-title-medium mt-1">{detail}</dd>
+      <dd className="md-title-medium mt-1">
+        {href ? (
+          <Link href={href} className="underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--md-sys-color-primary)]">{detail}</Link>
+        ) : detail}
+      </dd>
     </div>
   );
 }

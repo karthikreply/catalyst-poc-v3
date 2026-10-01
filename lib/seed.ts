@@ -30,6 +30,21 @@ export type RankingState = {
   locked: boolean;
 };
 
+export type SampleRunMark = {
+  verdict: "right" | "fix";
+  fields: string[];
+};
+
+/** One simulated pass over the sample claims. Null until someone starts it. */
+export type SampleRun = {
+  solutionId: string;
+  status: "not-run" | "ran" | "reviewed";
+  marks: Record<string, SampleRunMark>;
+  position: number;
+  reviewedBy: string | null;
+  at: string | null;
+};
+
 export type HackathonBooking = {
   date: string;
   googleFacilitator: string;
@@ -169,6 +184,8 @@ export type SessionGraph = {
   hackathon: HackathonBooking | null;
   /** CPM votes: one solution id per attendee id. */
   votes: Record<string, string>;
+  /** Sample claims preview. Null in the seed, and when the rank-1 solution changes. */
+  sampleRun: SampleRun | null;
 };
 
 export const patterns = [
@@ -413,6 +430,7 @@ export const initialSessionGraph: SessionGraph = {
   },
   hackathon: null,
   votes: {},
+  sampleRun: null,
   attendees: [
     { id: "dana", name: "Dana Reyes", role: "VP Claims Operations", reason: "Owns the operating outcome and can sponsor the pilot.", source: "crm", attendance: "attending" },
     { id: "michelle", name: "Michelle Dorsey", role: "Claims Supervisor", reason: "Brings the frontline workflow and handling-cost evidence.", source: "crm", attendance: "attending" },

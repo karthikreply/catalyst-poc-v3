@@ -21,6 +21,7 @@ function sessionFor(actor: string, setActor = vi.fn()) {
     graph: initialSessionGraph,
     viewer: { actor, name: "Someone", org: "Org" },
     setActor,
+    hydrated: true,
   });
   return setActor;
 }
@@ -36,6 +37,7 @@ describe("app shell navigation", () => {
   it("limits the customer rail to this engagement", () => {
     const markup = shellMarkup("cpm");
     expect(markup).toContain('href="/customer"');
+    expect(markup).not.toMatch(/href="\/"(?=[\s>])/);
     expect(markup).toContain('href="/scope"');
     expect(markup).toContain('href="/funding"');
     expect(markup).toContain("Your engagement");

@@ -8,8 +8,9 @@ import { CustomerAccountPending } from "@/components/customer-account-pending";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useSession } from "@/components/session-provider";
 import { UnavailableControl } from "@/components/unavailable-control";
+import { pilotReadinessCopy } from "@/lib/pilot-readiness";
 import { patterns } from "@/lib/seed";
-import { canFlagReferenceStory, customerHasAccount, pilotNextStepCopy, pilotPickTitle, pilotScopeLine } from "@/lib/session";
+import { canFlagReferenceStory, pilotNextStepCopy, pilotPickTitle, pilotScopeLine, sessionHasNamedCompany } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 const enableList = `# Enable list — customer cloud account
@@ -34,7 +35,7 @@ export default function PilotSpecPage() {
   const { graph, brand, viewer } = useSession();
   const [copied, setCopied] = useState(false);
   const [briefCopied, setBriefCopied] = useState(false);
-  if (viewer.actor === "cpm" && !customerHasAccount(viewer.actor, graph)) {
+  if (viewer.actor === "cpm" && !sessionHasNamedCompany(graph)) {
     return <CustomerAccountPending message="This is written once your account is in the session." />;
   }
   const pattern = patterns.find((item) => item.id === graph.session.patternId)!;
@@ -119,7 +120,7 @@ export default function PilotSpecPage() {
               <div key={term} className="bg-white p-4"><dt className="text-xs font-medium text-black/45">{term}</dt><dd className="mt-1 text-sm leading-6">{detail}</dd></div>
             ))}
           </dl>
-          <p className="mt-4 text-sm text-amber-800">Readiness: data owner identified. Security review needed — allow 5 days.</p>
+          <p className="mt-4 text-sm text-amber-800">{pilotReadinessCopy}</p>
         </section>
 
         {canFlagReferenceStory(viewer.actor) && (
