@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, CalendarDays, FileText, BadgeDollarSign, ListOrdered, Hourglass } from "lucide-react";
 
 import { UnavailableControl } from "@/components/unavailable-control";
+import { CustomerBookedThreeDays } from "@/components/what-the-three-days-will-be";
 import { useSession } from "@/components/session-provider";
 import type { Mechanic } from "@/lib/seed";
 import {
@@ -69,6 +70,8 @@ export default function CustomerHomePage() {
             <Link href="/funding" className="md-button-outlined">View funding pack</Link>
           </div>
         </section>
+
+        <CustomerBookedThreeDays graph={graph} />
 
         <section className="md-card-outlined mt-6 p-6" aria-labelledby="attending-schedule-title">
           <h2 id="attending-schedule-title" className="md-title-large">Schedule a hackathon</h2>
@@ -151,6 +154,8 @@ export default function CustomerHomePage() {
           </div>
         )}
       </section>
+
+      <CustomerBookedThreeDays graph={graph} />
 
       {hasAccount && <section className="mt-8" aria-labelledby="next-steps-title">
         <h2 id="next-steps-title" className="md-title-large">Next steps</h2>

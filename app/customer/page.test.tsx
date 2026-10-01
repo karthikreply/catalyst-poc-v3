@@ -58,6 +58,7 @@ describe("customer home", () => {
     expect(markup).toContain('href="/funding"');
     expect(markup).toContain("Book the hackathon first.");
     expect(markup).not.toContain("calendar.google.com");
+    expect(markup).not.toContain("What the three days will be.");
     expect(markup).not.toContain("Apply for DAF");
   });
 
@@ -89,6 +90,22 @@ describe("customer home", () => {
     const decoded = decodeURIComponent(href.replace(/&amp;/g, "&").replace(/\+/g, "%20"));
 
     expect(markup).toContain("You are attending. The pain is already on the account.");
+    expect(markup).toContain("What the three days will be.");
+    expect(markup).toContain("Start from the pain.");
+    expect(markup).toContain("Try it on your own documents.");
+    expect(markup).toContain("Write down what held.");
+    expect(markup).not.toContain("Which one becomes the pilot?");
+    expect(markup).not.toContain("as the pilot");
+    expect(markup).not.toContain(">Choose<");
+    expect(markup).not.toContain("Chosen");
+    expect(markup).not.toContain("What we built");
+    const readout = markup.slice(markup.indexOf("What the three days will be."), markup.indexOf("Schedule a hackathon"));
+    for (const title of bookedSolutionTitles(booked)) {
+      expect(readout.indexOf(title)).toBeGreaterThanOrEqual(0);
+      expect(readout.indexOf(title)).toBeLessThan(readout.indexOf("Start from the pain."));
+    }
+    expect(readout).toContain("Document AI");
+    expect(readout).toContain("Vertex AI");
     expect(markup).toContain("Open calendar");
     expect(markup).toContain('href="/funding"');
     expect(decoded).toContain("20261014");
@@ -183,6 +200,16 @@ describe("customer home", () => {
     const href = markup.match(/href="(https:\/\/calendar\.google\.com[^"]+)"/)?.[1] ?? "";
     const decoded = decodeURIComponent(href.replace(/&amp;/g, "&").replace(/\+/g, "%20"));
 
+    expect(markup).toContain("What the three days will be.");
+    expect(markup).toContain("Start from the pain.");
+    expect(markup).toContain("Day 1.");
+    expect(markup).toContain("Day 2.");
+    expect(markup).toContain("Day 3.");
+    expect(markup).not.toContain("Which one becomes the pilot?");
+    expect(markup).not.toContain("as the pilot");
+    expect(markup).not.toContain(">Choose<");
+    expect(markup).not.toContain("Chosen");
+    expect(markup).not.toContain("What we built");
     expect(markup).not.toContain('aria-disabled="true"');
     expect(decoded).toContain("20261014");
     expect(decoded).toContain("Partner: CDW");
@@ -222,5 +249,19 @@ describe("customer home", () => {
     const markup = renderToStaticMarkup(<CustomerHomePage />);
     expect(markup).toContain("Back to dashboard");
     expect(markup).not.toContain("Prioritize my use cases");
+    expect(markup).not.toContain("What the three days will be.");
+
+    const ids = rankedSolutions(initialSessionGraph).map((solution) => solution.id).slice(0, 3);
+    const booked = bookHackathon(ids.reduce((current, id) => toggleSelected(current, id), initialSessionGraph), {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Dana Reyes",
+      question: "Can we prove the three?",
+    });
+    mockGraph(booked, { actor: "partner", name: "Ravi Menon", org: "CDW" });
+    expect(renderToStaticMarkup(<CustomerHomePage />)).not.toContain("What the three days will be.");
+    mockGraph(booked, { actor: "pdm", name: "Priya Raghavan", org: "Google" });
+    expect(renderToStaticMarkup(<CustomerHomePage />)).not.toContain("Start from the pain.");
   });
 });

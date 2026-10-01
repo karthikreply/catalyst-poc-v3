@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { brands } from "@/lib/brands";
 import { initialSessionGraph } from "@/lib/seed";
@@ -8,6 +10,7 @@ import {
   applyMechanic,
   bookHackathon,
   bookedSolutionPains,
+  catalogSolutionById,
   coldScopeDefaults,
   rankedSolutions,
   toggleSelected,
@@ -26,7 +29,21 @@ function selectThree(graph = initialSessionGraph) {
   return ids.reduce((current, id) => toggleSelected(current, id), graph);
 }
 
+const dayLines = ["Start from the pain.", "Try it on your own documents.", "Write down what held."];
+
+function bookThree(graph = selectThree()) {
+  return bookHackathon(graph, {
+    date: "2026-10-14",
+    googleFacilitator: "Priya Raghavan",
+    partnerSpecialist: "Ravi Menon",
+    customerOwner: "Dana Reyes",
+    question: "Can we prove extraction on Heartland forms?",
+  });
+}
+
 describe("Rank page", () => {
+  afterEach(() => cleanup());
+
   beforeEach(() => {
     useSessionMock.mockReturnValue({
       graph: initialSessionGraph,
@@ -72,6 +89,27 @@ describe("Rank page", () => {
     expect(markup).toContain('href="/artifact"');
     expect(markup).not.toContain("Hackathon date");
     expect(markup).toContain("Lock ranking");
+
+    const block = markup.slice(markup.indexOf("What the three days will be."), markup.indexOf("Shortlist"));
+    const solutions = rankedSolutions(selected).slice(0, 3);
+    let cursor = 0;
+    for (const solution of solutions) {
+      const titleAt = block.indexOf(solution.title, cursor);
+      expect(titleAt).toBeGreaterThanOrEqual(cursor);
+      for (const product of solution.products) {
+        expect(block.indexOf(product, titleAt)).toBeGreaterThan(titleAt);
+      }
+      cursor = titleAt + solution.title.length;
+    }
+    for (const line of dayLines) {
+      expect(block.indexOf(line)).toBeGreaterThan(cursor);
+    }
+    expect(block).not.toContain("Choose");
+    expect(block).not.toContain("Solution showcase");
+    expect(block).not.toContain("Date ·");
+    expect(markup).not.toContain("Which one becomes the pilot?");
+    expect(markup).not.toContain("as the pilot");
+    expect(markup.indexOf("What the three days will be.")).toBeLessThan(markup.indexOf("Shortlist"));
   });
 
   it("opens the business case once the hackathon is booked with three titles", () => {
@@ -134,10 +172,34 @@ describe("Rank page", () => {
     expect(partnerMarkup).toContain("This demo shows the scope, not the build.");
     expect(partnerMarkup).toContain("Which one becomes the pilot?");
     expect(partnerMarkup).toContain("2026-10-16 · 14:00");
-    for (const row of bookedSolutionPains(booked)) {
-      expect(partnerMarkup).toContain(row.pain.replaceAll("'", "&#x27;"));
+    const section = partnerMarkup.slice(partnerMarkup.indexOf("What the three days produce"), partnerMarkup.indexOf("Shortlist"));
+    const rows = bookedSolutionPains(booked);
+    let cursor = 0;
+    for (const row of rows) {
+      expect(section).toContain(row.pain.replaceAll("'", "&#x27;"));
+      const titleAt = section.indexOf(row.title, cursor);
+      const painAt = section.indexOf(row.pain.replaceAll("'", "&#x27;"), titleAt);
+      expect(titleAt).toBeGreaterThanOrEqual(cursor);
+      expect(painAt).toBeGreaterThan(titleAt);
+      for (const product of catalogSolutionById(row.id, booked)?.products ?? []) {
+        expect(section.indexOf(product, painAt)).toBeGreaterThan(painAt);
+      }
+      cursor = painAt + 1;
     }
-    expect(partnerMarkup).toContain("as the pilot");
+    const solutionList = section.slice(0, section.indexOf("What the three days will be."));
+    expect(solutionList).not.toContain("Choose");
+    expect(rows.map((row) => section.split(`>${row.title}</p>`).length - 1)).toEqual([1, 1, 1]);
+    const pilotHeading = section.indexOf("Which one becomes the pilot?");
+    for (const line of dayLines) {
+      expect(section.indexOf(line)).toBeGreaterThan(cursor);
+      expect(section.indexOf(line)).toBeLessThan(pilotHeading);
+    }
+    expect(section.indexOf("Date ·")).toBeGreaterThan(section.indexOf("Write down what held."));
+    expect(section.indexOf("Date ·")).toBeLessThan(section.indexOf("Solution showcase"));
+    expect(section.indexOf("Solution showcase")).toBeLessThan(pilotHeading);
+    for (const row of rows) {
+      expect(section.indexOf(`Choose ${row.title} as the pilot`)).toBeGreaterThan(pilotHeading);
+    }
 
     useSessionMock.mockReturnValue({ ...session, viewer: { actor: "pdm", name: "Priya Raghavan", org: "Google" } });
     const pdmMarkup = renderToStaticMarkup(<RankPage />);
@@ -147,6 +209,48 @@ describe("Rank page", () => {
     useSessionMock.mockReturnValue({ ...session, viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" }, graph: selectThree() });
     expect(renderToStaticMarkup(<RankPage />)).not.toContain("What the three days produce");
   });
+
+  it("lets the partner and the customer choose a pilot", () => {
+    const booked = bookThree();
+    const setPilotPick = vi.fn();
+    const title = bookedSolutionPains(booked)[0].title;
+    const session = {
+      graph: booked,
+      brand: brands.cdw,
+      canEditSession: true,
+      moveSolution: vi.fn(),
+      toggleSelected: vi.fn(),
+      castVote: vi.fn(),
+      lockRanking: vi.fn(),
+      unlockRanking: vi.fn(),
+      bookHackathon: vi.fn(),
+      setPilotPick,
+    };
+
+    const secondTitle = bookedSolutionPains(booked)[1].title;
+    useSessionMock.mockReturnValue({ ...session, viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" } });
+    const partnerView = render(<RankPage />);
+    fireEvent.click(partnerView.getByRole("button", { name: `Choose ${title} as the pilot` }));
+    expect(setPilotPick).toHaveBeenCalledWith(booked.hackathon!.solutionIds[0]);
+    fireEvent.click(partnerView.getByRole("button", { name: `Choose ${secondTitle} as the pilot` }));
+    expect(setPilotPick).toHaveBeenLastCalledWith(booked.hackathon!.solutionIds[1]);
+    partnerView.unmount();
+
+    setPilotPick.mockClear();
+    useSessionMock.mockReturnValue({ ...session, viewer: { actor: "cpm", name: "Marcus Hale", org: "Heartland" } });
+    const customerView = render(<RankPage />);
+    fireEvent.click(customerView.getByRole("button", { name: `Choose ${title} as the pilot` }));
+    expect(setPilotPick).toHaveBeenCalledWith(booked.hackathon!.solutionIds[0]);
+    customerView.unmount();
+
+    setPilotPick.mockClear();
+    useSessionMock.mockReturnValue({ ...session, viewer: { actor: "pdm", name: "Priya Raghavan", org: "Google" } });
+    const pdmView = render(<RankPage />);
+    expect(pdmView.queryByRole("button", { name: /as the pilot/ })).toBeNull();
+    expect(pdmView.getByText("Pilot not yet chosen. The room names it at the showcase.")).toBeTruthy();
+    expect(setPilotPick).not.toHaveBeenCalled();
+    pdmView.unmount();
+  }, 20000);
 
   it("shows the cold sample title and amber line without the company on cards", () => {
     const cold = applyColdScope(initialSessionGraph, { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees);

@@ -5,6 +5,7 @@ import { ArrowDown, ArrowRight, ArrowUp, Lock, Unlock } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { HackathonThreeDays } from "@/components/hackathon-three-days";
+import { WhatTheThreeDaysWillBe } from "@/components/what-the-three-days-will-be";
 import { useSession } from "@/components/session-provider";
 import {
   bookedSolutionTitles,
@@ -80,6 +81,12 @@ export default function RankPage() {
         </div>
 
         {booked && <HackathonThreeDays graph={graph} className="mt-8" />}
+        {!booked && selectedCount === 3 && (
+          <WhatTheThreeDaysWillBe
+            solutions={selected}
+            className="mt-8 rounded-sm border border-black/10 bg-white p-6"
+          />
+        )}
 
         <section className="mt-8 rounded-sm border border-black/10 bg-white p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
