@@ -1626,13 +1626,12 @@ describe("customer persona", () => {
 
   it("keeps the retired customer actor id out of source", () => {
     const retired = "c\u0070m";
-    const hits = ["lib", "app", "components"].flatMap(function files(dir: string): string[] {
-      return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) return files(full);
-        return /\.(ts|tsx)$/.test(entry.name) ? [full] : [];
-      });
-    }).filter((file) => readFileSync(file, "utf8").includes(retired));
+    const files = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return files(full);
+      return /\.(ts|tsx)$/.test(entry.name) ? [full] : [];
+    });
+    const hits = ["lib", "app", "components"].flatMap((dir) => files(dir)).filter((file) => readFileSync(file, "utf8").includes(retired));
     expect(hits).toEqual([]);
   });
 
