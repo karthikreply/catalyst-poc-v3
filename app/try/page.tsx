@@ -5,7 +5,7 @@ import Link from "next/link";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useSession } from "@/components/session-provider";
-import { pilotReadinessCopy } from "@/lib/pilot-readiness";
+import { pilotReadinessItems } from "@/lib/pilot-readiness";
 import {
   nextUnmarkedIndex,
   sampleClaimFields,
@@ -40,6 +40,7 @@ function actionClass(primary: boolean) {
 
 function BookHackathon({ primary = false }: { primary?: boolean }) {
   const { graph, viewer } = useSession();
+  if (graph.hackathon?.booked) return null;
   const mayBook = canBookHackathon(viewer.actor) && graph.ranking.selected.length === 3;
   if (!mayBook) {
     return <Button type="button" disabled className="opacity-50">Book the hackathon</Button>;
@@ -145,7 +146,7 @@ function PartnerSampleRun({ run }: { run: SampleRun | null }) {
       <section className="mt-6 rounded-sm border border-black/10 bg-white p-6">
         <h2 className="text-lg font-semibold">Before the real hackathon</h2>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-black/70">
-          <li>{pilotReadinessCopy}</li>
+          {pilotReadinessItems.map((item) => <li key={item}>{item}</li>)}
         </ul>
       </section>
       <div className="mt-6"><BookHackathon /></div>
@@ -182,6 +183,7 @@ export default function TryPage() {
   }, [running]);
 
   const ready = sampleRunSolutionReady(graph);
+  const booked = Boolean(graph.hackathon?.booked);
   const canMark = canMutateSampleRun(viewer.actor, graph);
   const customer = isCustomerViewer(viewer.actor);
   const run = graph.sampleRun;
@@ -272,8 +274,8 @@ export default function TryPage() {
 
       {!running && !showReview && !showSummary && (
         <>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Try it on eight sample claims</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-black/58">About three minutes. Nothing here is measured, and none of it goes into your business case.</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">{booked ? "Preview day two on eight sample claims" : "Try it on eight sample claims"}</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-black/58">{booked ? "A preview of day two. Nothing here is measured, and none of it goes into your business case." : "About three minutes. Nothing here is measured, and none of it goes into your business case."}</p>
           <p className="mt-4 text-sm leading-6 text-black/70">{solutionTitle}. Each claim is read, and you say whether it came back right.</p>
           <div className="mt-6 flex flex-wrap gap-3">
             {canMark && (
@@ -350,7 +352,11 @@ export default function TryPage() {
           <p className="mt-6 max-w-2xl text-sm leading-6 text-black/70">We chose two claims to be hard on purpose: a handwritten margin note on claim 3, and a three-page claim whose policy number changed on claim 6. These are where the three days would start.</p>
           <p className="mt-4 max-w-2xl text-sm leading-6 text-black/70">Eight made-up claims can&apos;t measure accuracy. The hackathon works on your own documents.</p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            <BookHackathon primary />
+            {booked ? (
+              <Link href="/pilot-spec" className={actionClass(true)}>Back to the pilot spec</Link>
+            ) : (
+              <BookHackathon primary />
+            )}
             <Button type="button" variant="outline" onClick={reviewAnswers}>Review answers</Button>
             {canMark && (confirming ? (
               <button type="button" className={cn("text-sm text-black/55 underline underline-offset-2", focusRing)} onClick={confirmStartOver}>
@@ -362,6 +368,14 @@ export default function TryPage() {
               </button>
             ))}
           </div>
+          {booked && graph.hackathon && (
+            <section className="mt-6 rounded-sm border border-black/10 bg-white p-6">
+              <h2 className="text-lg font-semibold">Before the hackathon on {graph.hackathon.date}</h2>
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-black/70">
+                {pilotReadinessItems.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </section>
+          )}
         </>
       )}
     </div>

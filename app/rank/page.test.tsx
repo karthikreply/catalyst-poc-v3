@@ -244,7 +244,7 @@ describe("Rank page", () => {
     useSessionMock.mockReturnValue({
       ...session,
       canEditSession: false,
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Heartland" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Heartland" },
     });
     const attendingView = render(<RankPage />);
     expect(attendingView.queryByRole("button", { name: /as the pilot/ })).toBeNull();
@@ -257,7 +257,7 @@ describe("Rank page", () => {
       ...session,
       graph: applyDeliveryMode(booked, "self-service"),
       canEditSession: true,
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Heartland" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Heartland" },
     });
     const customerView = render(<RankPage />);
     fireEvent.click(customerView.getByRole("button", { name: `Choose ${title} as the pilot` }));
@@ -277,7 +277,7 @@ describe("Rank page", () => {
     const cold = applyColdScope(initialSessionGraph, { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees);
     useSessionMock.mockReturnValue({
       graph: cold,
-      viewer: { actor: "cpm", name: "Customer", org: "Reply" },
+      viewer: { actor: "customer", name: "Customer", org: "Reply" },
       canEditSession: true,
       moveSolution: vi.fn(),
       toggleSelected: vi.fn(),
@@ -321,7 +321,7 @@ describe("Rank page", () => {
     const selected = selectThree();
     useSessionMock.mockReturnValue({
       graph: selected,
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Heartland" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Heartland" },
       canEditSession: true,
       moveSolution: vi.fn(),
       toggleSelected: vi.fn(),
@@ -345,7 +345,7 @@ describe("Rank page", () => {
   it("shows 0/3 for a customer before any selection and no strip for the partner", () => {
     useSessionMock.mockReturnValue({
       graph: initialSessionGraph,
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Heartland" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Heartland" },
       canEditSession: true,
       moveSolution: vi.fn(),
       toggleSelected: vi.fn(),

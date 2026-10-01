@@ -8,7 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { useSession } from "@/components/session-provider";
 import { withBrandPeople } from "@/lib/brands";
 import { ledgerAnnualTotal } from "@/lib/cost-model";
-import {
+import { isCustomerViewer,
   claimsArtifactCopy,
   claimsVolumeProvenanceCopy,
   customerHasAccount,
@@ -41,7 +41,7 @@ function useFundingData() {
 
 export default function FundingPage() {
   const data = useFundingData();
-  if (data.viewer.actor === "cpm" && !customerHasAccount(data.viewer.actor, data.graph)) {
+  if (isCustomerViewer(data.viewer.actor) && !customerHasAccount(data.viewer.actor, data.graph)) {
     return <CustomerAccountPending message="This is written once your account is in the session." />;
   }
   return data.viewer.actor === "partner"

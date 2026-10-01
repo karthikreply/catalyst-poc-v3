@@ -7,7 +7,7 @@ import { ArrowRight, BadgeDollarSign, ChartNoAxesCombined, CircleHelp, Presentat
 
 import { useSession } from "@/components/session-provider";
 import type { Actor } from "@/lib/seed";
-import { customerSponsor, handoffLabel } from "@/lib/session";
+import { isCustomerViewer, customerSponsor, handoffLabel } from "@/lib/session";
 
 const entryDoors: { actor: Actor; title: string; tool: string; note?: string }[] = [
   {
@@ -21,7 +21,7 @@ const entryDoors: { actor: Actor; title: string; tool: string; note?: string }[]
     tool: "Opens from the partner incentive programme where funded sessions are claimed.",
   },
   {
-    actor: "cpm",
+    actor: "customer",
     title: "Customer",
     tool: "Opens from a campaign or trial. Look up your account, or add it.",
   },
@@ -30,7 +30,7 @@ const entryDoors: { actor: Actor; title: string; tool: string; note?: string }[]
 export default function Home() {
   const { graph, viewer, setActor, setCustomerDoor, hydrated } = useSession();
   const router = useRouter();
-  const customerViewer = viewer.actor === "cpm";
+  const customerViewer = isCustomerViewer(viewer.actor);
   // Commercially the handoff window is 48 hours after the room. That is a definition, not a filter:
   // the strip shows whatever was recorded, whenever it was recorded.
   const handoff = graph.session.handoff;
@@ -69,8 +69,8 @@ export default function Home() {
               key={door.actor}
               type="button"
               onClick={() => {
-                if (door.actor === "cpm") {
-                  setActor("cpm");
+                if (isCustomerViewer(door.actor)) {
+                  setActor("customer");
                   setCustomerDoor(true);
                   router.push("/customer");
                   return;

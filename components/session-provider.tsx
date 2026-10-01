@@ -35,6 +35,8 @@ import {
   castVote as castVoteInGraph,
   graphForActor,
   hydrateSessionGraph,
+  isCustomerViewer,
+  migrateStoredActor,
   canMutateSampleRun,
   canSetSamplePosition,
   isSessionReadOnly,
@@ -132,20 +134,19 @@ function hydrateFromStorage(apply: {
     SUPERSEDED_KEYS.forEach((key) => localStorage.removeItem(key));
     const savedGraph = localStorage.getItem(GRAPH_KEY);
     const savedBrand = localStorage.getItem(BRAND_KEY) as BrandId | null;
-    const savedActor = sessionStorage.getItem(ACTOR_KEY) as Actor | null;
+    const savedActor = migrateStoredActor(sessionStorage.getItem(ACTOR_KEY));
     if (savedGraph) {
       try {
-        const savedViewer = savedActor === "pdm" || savedActor === "partner" || savedActor === "cpm"
-          ? savedActor
-          : "partner";
+        const savedViewer = savedActor ?? "partner";
         apply.graph(graphForActor(hydrateSessionGraph(JSON.parse(savedGraph) as SessionGraph), savedViewer));
       } catch {
         localStorage.removeItem(GRAPH_KEY);
       }
     }
     if (savedBrand && brands[savedBrand]) apply.brand(savedBrand);
-    if (savedActor === "pdm" || savedActor === "partner" || savedActor === "cpm") {
+    if (savedActor) {
       apply.actor(savedActor);
+      if (sessionStorage.getItem(ACTOR_KEY) !== savedActor) sessionStorage.setItem(ACTOR_KEY, savedActor);
     }
   } catch {
     // Storage blocked. Fall through so the default partner view still opens.
@@ -178,9 +179,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [graph, hydrated]);
 
   const brand = brands[brandId];
-  const viewer = viewerForActor(actor, brand);
+  const viewer = viewerForActor(actor, brand, graph);
   const canEditSession = !isSessionReadOnly(actor, graph);
-  const canCustomerAct = canEditSession || actor === "cpm";
+  const canCustomerAct = canEditSession || isCustomerViewer(actor);
 
   function setBrandId(id: BrandId) {
     setBrandIdState(id);
@@ -193,7 +194,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     sessionStorage.setItem(ACTOR_KEY, next);
     setGraph((current) => {
       const nextGraph = graphForActor(current, next);
-      if (next === "cpm" || nextGraph.session.customerDoor !== true) return nextGraph;
+      if (isCustomerViewer(next) || nextGraph.session.customerDoor !== true) return nextGraph;
       return {
         ...nextGraph,
         session: { ...nextGraph.session, customerDoor: false },
@@ -426,7 +427,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   function chooseCustomerFormat(mechanic: Mechanic) {
     // Customer door only: starting the session is what makes it editable.
-    if (actor !== "cpm") return;
+    if (!isCustomerViewer(actor)) return;
     setGraph((current) => chooseCustomerFormatInGraph(current, mechanic));
   }
 

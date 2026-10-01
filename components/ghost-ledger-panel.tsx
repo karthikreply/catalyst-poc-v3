@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/components/session-provider";
 import { componentMonthlyTotal, ledgerAnnualTotal, ledgerMonthlyTotal, perSecondRate } from "@/lib/cost-model";
-import { hasCompleteCostComponents } from "@/lib/session";
+import { isCustomerViewer, hasCompleteCostComponents } from "@/lib/session";
 import { formatCurrency, formatPreciseCurrency } from "@/lib/value";
 
 export function GhostLedgerPanel() {
@@ -51,7 +51,7 @@ export function GhostLedgerPanel() {
       {graph.session.delivery === "self-service" && (
         <p className="mt-1 text-sm font-medium text-amber-800">Unverified estimate</p>
       )}
-      {viewer.actor === "cpm" && !canEditSession && (
+      {isCustomerViewer(viewer.actor) && !canEditSession && (
         <p className="mt-3 text-sm text-black/58">Historical session record — the platform vendor sees completed evidence shared by the partner, not live session activity.</p>
       )}
       <div className="mt-6 divide-y divide-black/10 border-y border-black/10">

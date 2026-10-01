@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { brands } from "./brands";
@@ -21,6 +23,7 @@ import {
   bookHackathon,
   bindAnnualValue,
   chooseCustomerFormat,
+  customerGreeting,
   customerHasAccount,
   sessionHasNamedCompany,
   customerHomeSummary,
@@ -54,6 +57,7 @@ import {
   markHackathonCalendarAdded,
   markHackathonMeetAdded,
   hydrateSessionGraph,
+  migrateStoredActor,
   inputsConfirmedByCopy,
   missingColdRoles,
   isQualified,
@@ -79,11 +83,15 @@ import {
   updateCapture,
   updateValueConfirmer,
   viewerForActor,
+  viewingAsCustomerLabel,
   bookedSolutionPains,
   defaultShowcaseAt,
   pilotNextStepCopy,
   pilotPickTitle,
   pilotScopeLine,
+  pilotSpecUseCase,
+  sampleRunEntryReady,
+  showsSampleRunLink,
   setPilotPick,
   showcaseLabel,
   handoffLabel,
@@ -302,17 +310,17 @@ describe("actor model", () => {
       name: "Ravi Menon",
       org: "CDW",
     });
-    expect(viewerForActor("cpm", brands.cdw)).toEqual({
-      actor: "cpm",
-      name: "Marcus Hale",
-      org: "Platform vendor",
+    expect(viewerForActor("customer", brands.cdw)).toEqual({
+      actor: "customer",
+      name: "Dana Reyes",
+      org: "Heartland Mutual Insurance",
     });
     expect(isSessionReadOnly("pdm", initialSessionGraph)).toBe(false);
     expect(isSessionReadOnly("partner", initialSessionGraph)).toBe(false);
-    expect(isSessionReadOnly("cpm", initialSessionGraph)).toBe(true);
-    expect(isSessionReadOnly("cpm", applyDeliveryMode(initialSessionGraph, "self-service"))).toBe(false);
+    expect(isSessionReadOnly("customer", initialSessionGraph)).toBe(true);
+    expect(isSessionReadOnly("customer", applyDeliveryMode(initialSessionGraph, "self-service"))).toBe(false);
     expect(isSessionReadOnly(
-      "cpm",
+      "customer",
       applyColdScope(initialSessionGraph, coldScopeDefaults.company, coldScopeDefaults.attendees),
     )).toBe(false);
   });
@@ -676,7 +684,7 @@ describe("artifact consequences", () => {
       secondary: null,
       tertiary: null,
     });
-    expect(artifactActions("cpm", false, "facilitated")).toEqual({
+    expect(artifactActions("customer", false, "facilitated")).toEqual({
       primary: null,
       secondary: null,
       tertiary: null,
@@ -686,7 +694,7 @@ describe("artifact consequences", () => {
   it("offers reference-story review to vendor actors on the pilot spec", () => {
     expect(canFlagReferenceStory("partner")).toBe(false);
     expect(canFlagReferenceStory("pdm")).toBe(true);
-    expect(canFlagReferenceStory("cpm")).toBe(true);
+    expect(canFlagReferenceStory("customer")).toBe(false);
   });
 
   it("leads a self-service artifact with facilitated verification", () => {
@@ -721,9 +729,9 @@ describe("scope access", () => {
     expect(canViewPartnerScope("partner")).toBe(true);
     expect(canViewPartnerScope("pdm")).toBe(true);
     expect(canBookHackathon("partner")).toBe(true);
-    expect(canBookHackathon("cpm")).toBe(true);
+    expect(canBookHackathon("customer")).toBe(true);
     expect(canBookHackathon("pdm")).toBe(false);
-    expect(canViewPartnerScope("cpm")).toBe(false);
+    expect(canViewPartnerScope("customer")).toBe(false);
   });
 
   it("starts the PDM scenario from clean seeded data after a cold customer", () => {
@@ -972,8 +980,8 @@ describe("solution ranking and hackathon booking", () => {
     expect(lookupAccount("heartland ", "partner").hit).toBe(true);
     expect(lookupAccount("Heartland Mutual Insurance", "pdm").hit).toBe(true);
     expect(lookupAccount("heart", "partner").hit).toBe(false);
-    expect(lookupAccount("Heartland", "cpm").hit).toBe(false);
-    expect(lookupAccount("Reply", "cpm").hit).toBe(false);
+    expect(lookupAccount("Heartland", "customer").hit).toBe(false);
+    expect(lookupAccount("Reply", "customer").hit).toBe(false);
   });
 
   it("enriches Heartland names on a hit and never on a miss", () => {
@@ -1088,13 +1096,13 @@ describe("customer home", () => {
   }
 
   it("is true only for a customer with a named cold account", () => {
-    expect(customerHasAccount("cpm", initialSessionGraph)).toBe(false);
+    expect(customerHasAccount("customer", initialSessionGraph)).toBe(false);
     expect(customerHasAccount("partner", applyColdScope(initialSessionGraph, { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees))).toBe(false);
     expect(customerHasAccount("pdm", applyColdScope(initialSessionGraph, { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees))).toBe(false);
     const named = applyColdScope(initialSessionGraph, { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees);
-    expect(customerHasAccount("cpm", named)).toBe(true);
+    expect(customerHasAccount("customer", named)).toBe(true);
     const blank = applyColdScope(initialSessionGraph, { name: "  ", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees);
-    expect(customerHasAccount("cpm", blank)).toBe(false);
+    expect(customerHasAccount("customer", blank)).toBe(false);
   });
 
   it("treats a named company as on the session even when the scope is seeded", () => {
@@ -1103,7 +1111,7 @@ describe("customer home", () => {
     expect(sessionHasNamedCompany(named)).toBe(true);
     const blank = applyColdScope(initialSessionGraph, { name: "  ", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees);
     expect(sessionHasNamedCompany(blank)).toBe(false);
-    expect(customerHasAccount("cpm", initialSessionGraph)).toBe(false);
+    expect(customerHasAccount("customer", initialSessionGraph)).toBe(false);
   });
 
   it("treats the seeded facilitated graph as not started", () => {
@@ -1114,7 +1122,7 @@ describe("customer home", () => {
     expect(summary.annualValue).toBeNull();
     expect(summary.continueHref).toBeNull();
     expect(summary.funding).toBe("Not started");
-    expect(isSessionReadOnly("cpm", initialSessionGraph)).toBe(true);
+    expect(isSessionReadOnly("customer", initialSessionGraph)).toBe(true);
   });
 
   it("starts a customer session by choosing a format", () => {
@@ -1123,7 +1131,7 @@ describe("customer home", () => {
     expect(ledger.session.delivery).toBe("self-service");
     expect(ledger.session.mechanic).toBe("ghost-ledger");
     expect(ledger.agenda.every((step) => step.state === "upcoming")).toBe(true);
-    expect(isSessionReadOnly("cpm", ledger)).toBe(false);
+    expect(isSessionReadOnly("customer", ledger)).toBe(false);
 
     const summary = customerHomeSummary(ledger, "CDW");
     expect(summary.started).toBe(true);
@@ -1154,9 +1162,9 @@ describe("customer home", () => {
     expect(opened.session.delivery).toBe("facilitated");
     expect(opened.session.mechanic).toBe(initialSessionGraph.session.mechanic);
     expect(opened.session.customerName).toBe(initialSessionGraph.session.customerName);
-    expect(isCustomerAttending("cpm", initialSessionGraph)).toBe(true);
-    expect(isCustomerAttending("cpm", opened)).toBe(false);
-    expect(isCustomerAttending("cpm", chooseCustomerFormat(opened, "value-sprint"))).toBe(false);
+    expect(isCustomerAttending("customer", initialSessionGraph)).toBe(true);
+    expect(isCustomerAttending("customer", opened)).toBe(false);
+    expect(isCustomerAttending("customer", chooseCustomerFormat(opened, "value-sprint"))).toBe(false);
     expect(isCustomerAttending("partner", opened)).toBe(false);
   });
 
@@ -1499,13 +1507,13 @@ describe("sample run", () => {
   });
 
   it("guards marks by role", () => {
-    expect(isCustomerViewer("cpm")).toBe(true);
+    expect(isCustomerViewer("customer")).toBe(true);
     expect(isCustomerViewer("partner")).toBe(false);
     expect(isCustomerViewer("pdm")).toBe(false);
     expect(canMutateSampleRun("partner", initialSessionGraph)).toBe(true);
     expect(canMutateSampleRun("pdm", initialSessionGraph)).toBe(false);
-    expect(canMutateSampleRun("cpm", initialSessionGraph)).toBe(false);
-    expect(canMutateSampleRun("cpm", applyDeliveryMode(initialSessionGraph, "self-service"))).toBe(true);
+    expect(canMutateSampleRun("customer", initialSessionGraph)).toBe(false);
+    expect(canMutateSampleRun("customer", applyDeliveryMode(initialSessionGraph, "self-service"))).toBe(true);
 
     const door = { ...initialSessionGraph, session: { ...initialSessionGraph.session, customerDoor: true } };
     expect(canMutateSampleRun("partner", door)).toBe(false);
@@ -1513,7 +1521,7 @@ describe("sample run", () => {
     expect(canMutateSampleRun("partner", applyDeliveryMode(initialSessionGraph, "google-facilitated"))).toBe(false);
 
     const started = startSampleRun(initialSessionGraph, "partner", "Ravi Menon", at);
-    expect(markSampleClaim(started, "cpm", "claim-1", "right", [], "Marcus Hale", at)).toBe(started);
+    expect(markSampleClaim(started, "customer", "claim-1", "right", [], "Dana Reyes", at)).toBe(started);
     expect(markSampleClaim(started, "pdm", "claim-1", "right", [], "Priya Raghavan", at)).toBe(started);
     expect(startSampleRun(initialSessionGraph, "pdm", "Priya Raghavan", at)).toBe(initialSessionGraph);
     expect(startSampleRun(door, "partner", "Ravi Menon", at)).toBe(door);
@@ -1555,6 +1563,115 @@ describe("sample run", () => {
     expect(partial.sampleRun?.position).toBe(3);
     expect(liveSampleRunFlag(started)).toBe(true);
     expect(liveSampleRunFlag(initialSessionGraph)).toBe(false);
+  });
+});
+
+describe("customer persona", () => {
+  it("names Dana on the seeded account and the first cold attendee otherwise", () => {
+    expect(viewerForActor("customer", brands.cdw).name).toBe("Dana Reyes");
+    expect(customerGreeting("Dana Reyes")).toBe("Hello, Dana");
+    expect(viewingAsCustomerLabel("Dana Reyes")).toBe("Dana Reyes · customer");
+
+    const cold = applyColdScope(
+      initialSessionGraph,
+      { name: "Northwind", industry: "Insurance", sizeBand: "Enterprise" },
+      [{ name: "Alex Chen", role: "Developer" }],
+    );
+    expect(viewerForActor("customer", brands.cdw, cold)).toMatchObject({
+      actor: "customer",
+      name: "Alex Chen",
+    });
+
+    const empty = applyColdScope(
+      initialSessionGraph,
+      { name: "", industry: "Insurance", sizeBand: "Enterprise" },
+      [{ name: "  ", role: "Developer" }],
+    );
+    expect(viewerForActor("customer", brands.cdw, empty).name).toBe("");
+    expect(customerGreeting("")).toBe("Welcome");
+    expect(viewingAsCustomerLabel("")).toBe("Customer");
+  });
+
+  it("migrates a stored customer actor id without treating person names as actors", () => {
+    const retired = "c\u0070m";
+    expect(migrateStoredActor(retired)).toBe("customer");
+    const stored = {
+      ...initialSessionGraph,
+      captures: [{ ...initialSessionGraph.captures[0], attributedTo: retired }],
+      valueInputs: initialSessionGraph.valueInputs.map((input, index) => (
+        index === 0 ? { ...input, confirmedBy: retired } : input
+      )),
+      votes: { [retired]: "sol-intake-extraction" },
+      sampleRun: {
+        solutionId: "sol-intake-extraction",
+        status: "ran" as const,
+        marks: {},
+        position: 0,
+        reviewedBy: retired,
+        at: "2026-10-01T00:00:00.000Z",
+      },
+      session: {
+        ...initialSessionGraph.session,
+        handoff: { kind: "pilot" as const, at: "2026-10-01T00:00:00.000Z", sponsor: retired },
+      },
+    };
+    const hydrated = hydrateSessionGraph(stored);
+    expect(hydrated.captures[0].attributedTo).toBe("customer");
+    expect(hydrated.valueInputs[0].confirmedBy).toBe("customer");
+    expect(hydrated.votes.customer).toBe("sol-intake-extraction");
+    expect(hydrated.sampleRun?.reviewedBy).toBe("customer");
+    expect(hydrated.session.handoff?.sponsor).toBe("customer");
+    expect(hydrated.valueInputs.find((input) => input.id === "delay")?.confirmedBy).toBe("Dana Reyes");
+  });
+
+  it("keeps the retired customer actor id out of source", () => {
+    const retired = "c\u0070m";
+    const hits = ["lib", "app", "components"].flatMap(function files(dir: string): string[] {
+      return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) return files(full);
+        return /\.(ts|tsx)$/.test(entry.name) ? [full] : [];
+      });
+    }).filter((file) => readFileSync(file, "utf8").includes(retired));
+    expect(hits).toEqual([]);
+  });
+
+  it("shows the pilot use case as a solution title", () => {
+    const fragment = { ...initialSessionGraph, outcome: { ...initialSessionGraph.outcome, useCase: "document" } };
+    expect(pilotSpecUseCase(fragment)).toBe("Not captured yet");
+    const booked = bookHackathon(selectSample(fragment), {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Dana Reyes",
+      question: "Can we prove the three?",
+    });
+    expect(pilotSpecUseCase({ ...booked, outcome: { ...booked.outcome, useCase: "document" } })).toBe(
+      bookedSolutionTitles(booked).join(", "),
+    );
+    const picked = setPilotPick(booked, booked.hackathon!.solutionIds[1]);
+    expect(pilotSpecUseCase(picked)).toBe(bookedSolutionTitles(booked)[1]);
+    expect(pilotSpecUseCase(picked)).not.toBe("document");
+  });
+
+  it("links the sample run for the customer and a facilitated partner, and counts only for the PDM", () => {
+    const locked = lockRanking(selectSample(initialSessionGraph));
+    expect(sampleRunEntryReady(locked)).toBe(true);
+    expect(showsSampleRunLink("customer", locked)).toBe(true);
+    expect(showsSampleRunLink("partner", locked)).toBe(true);
+    expect(showsSampleRunLink("pdm", locked)).toBe(false);
+    expect(showsSampleRunLink("partner", applyDeliveryMode(locked, "self-service"))).toBe(false);
+    const booked = bookHackathon(locked, {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Dana Reyes",
+      question: "Can we prove the three?",
+    });
+    expect(showsSampleRunLink("customer", booked)).toBe(true);
+    const other = setPilotPick(booked, booked.hackathon!.solutionIds[1]);
+    expect(sampleRunEntryReady(other)).toBe(false);
+    expect(showsSampleRunLink("customer", other)).toBe(false);
   });
 });
 

@@ -24,7 +24,7 @@ describe("read-only Plan controls", () => {
     useSessionMock.mockReturnValue({
       graph: initialSessionGraph,
       brand: brands.cdw,
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Platform vendor" },
       setDelivery: vi.fn(),
       setMechanic: vi.fn(),
       setCloseStyle: vi.fn(),
@@ -49,7 +49,7 @@ describe("read-only Plan controls", () => {
     useSessionMock.mockReturnValue({
       graph: account,
       brand: brands.cdw,
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Reply" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Reply" },
       setDelivery: vi.fn(),
       setMechanic: vi.fn(),
       setCloseStyle: vi.fn(),

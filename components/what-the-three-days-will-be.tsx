@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { SessionGraph } from "@/lib/seed";
 import { catalogSolutionById } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -24,12 +26,21 @@ export function SolutionProductList({ title, products }: { title: string; produc
   );
 }
 
-export function ThreeDayShapeList({ labelledBy, className }: { labelledBy: string; className?: string }) {
+export function ThreeDayShapeList({
+  labelledBy,
+  className,
+  afterDay,
+}: {
+  labelledBy: string;
+  className?: string;
+  afterDay?: Partial<Record<(typeof threeDayShape)[number]["day"], ReactNode>>;
+}) {
   return (
     <ol className={cn("mt-3 space-y-2", className)} aria-labelledby={labelledBy}>
       {threeDayShape.map((item) => (
         <li key={item.day} className="text-sm leading-6 text-black">
           <span className="font-semibold">{item.day}.</span> {item.text}
+          {afterDay?.[item.day]}
         </li>
       ))}
     </ol>

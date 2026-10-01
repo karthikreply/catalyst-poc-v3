@@ -23,7 +23,7 @@ function sessionFor(actor: string, hydrated: boolean, graph = initialSessionGrap
   useSessionMock.mockReturnValue({
     viewer: {
       actor,
-      name: actor === "cpm" ? "Marcus Hale" : actor === "pdm" ? "Priya Raghavan" : "Ravi Menon",
+      name: actor === "customer" ? "Dana Reyes" : actor === "pdm" ? "Priya Raghavan" : "Ravi Menon",
       org: "Org",
     },
     setActor: vi.fn(),
@@ -52,7 +52,7 @@ describe("program dashboard", () => {
     const view = render(<Home />);
     fireEvent.click(view.getByRole("button", { name: /^Customer/ }));
 
-    expect(setActor).toHaveBeenCalledWith("cpm");
+    expect(setActor).toHaveBeenCalledWith("customer");
     expect(setCustomerDoor).toHaveBeenCalledWith(true);
     expect(push).toHaveBeenCalledWith("/customer");
     expect(replace).not.toHaveBeenCalled();
@@ -67,7 +67,7 @@ describe("program dashboard", () => {
   });
 
   it("renders no Telemetry control for the customer", () => {
-    sessionFor("cpm", true);
+    sessionFor("customer", true);
     const markup = renderToStaticMarkup(<Home />);
     expect(markup).not.toContain("Telemetry");
     expect(markup).not.toContain("Funding");

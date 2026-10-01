@@ -21,7 +21,7 @@ function sessionFor(actor: string, hydrated: boolean, graph = initialSessionGrap
   useSessionMock.mockReturnValue({
     viewer: {
       actor,
-      name: actor === "cpm" ? "Marcus Hale" : actor === "pdm" ? "Priya Raghavan" : "Ravi Menon",
+      name: actor === "customer" ? "Dana Reyes" : actor === "pdm" ? "Priya Raghavan" : "Ravi Menon",
       org: "Org",
     },
     hydrated,
@@ -66,7 +66,7 @@ describe("my sessions", () => {
   });
 
   it("sends the customer back to their engagement and renders nothing", () => {
-    sessionFor("cpm", true);
+    sessionFor("customer", true);
     const markup = renderToStaticMarkup(<SessionsPage />);
     expect(markup).not.toContain("My sessions");
     expect(markup).not.toContain("Heartland");

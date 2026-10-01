@@ -29,7 +29,7 @@ vi.mock("@/components/session-provider", () => ({
 
 import CustomerHomePage from "./page";
 
-const customer = { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" };
+const customer = { actor: "customer", name: "Dana Reyes", org: "Heartland Mutual Insurance" };
 
 function mockGraph(graph = initialSessionGraph, viewer = customer) {
   useSessionMock.mockReturnValue({
@@ -282,14 +282,18 @@ describe("customer home", () => {
 
     const started = startSampleRun(locked, "partner", "Ravi Menon", "2026-10-01T00:00:00.000Z");
     mockGraph(started);
-    expect(renderToStaticMarkup(<CustomerHomePage />)).toContain("In progress");
+    expect(renderToStaticMarkup(<CustomerHomePage />)).toContain("Reviewed 0 of 8");
 
-    let reviewed = started;
+    const partial = markSampleClaim(started, "partner", sampleClaims[0].id, "right", [], "Ravi Menon", "2026-10-01T00:00:00.000Z", true);
+    mockGraph(partial);
+    expect(renderToStaticMarkup(<CustomerHomePage />)).toContain("Reviewed 1 of 8");
+
+    let reviewed = partial;
     for (const claim of sampleClaims) {
       reviewed = markSampleClaim(reviewed, "partner", claim.id, "right", [], "Ravi Menon", "2026-10-01T00:00:00.000Z", true);
     }
     mockGraph(reviewed);
-    expect(renderToStaticMarkup(<CustomerHomePage />)).toContain("8 of 8 look right");
+    expect(renderToStaticMarkup(<CustomerHomePage />)).toContain("Reviewed 8 of 8 · 0 need a fix");
 
     mockGraph(locked, { actor: "partner", name: "Ravi Menon", org: "CDW" });
     expect(renderToStaticMarkup(<CustomerHomePage />)).not.toContain("Sample run");

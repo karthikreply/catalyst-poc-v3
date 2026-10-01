@@ -38,7 +38,7 @@ describe("exact claims provenance", () => {
     useSessionMock.mockReturnValue({
       graph: initialSessionGraph,
       brand: brands.cdw,
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Platform vendor" },
     });
 
     const markup = renderToStaticMarkup(<FundingPage />);

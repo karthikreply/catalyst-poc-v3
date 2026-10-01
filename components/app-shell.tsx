@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { type Actor } from "@/lib/seed";
+import { isCustomerViewer, viewerForActor, viewingAsCustomerLabel } from "@/lib/session";
 import { breadcrumbForPath, isBrandFlowPath, navItemsForActor, type VendorNavItem } from "@/lib/vendor-shell";
 import { BrandFlowFrame } from "./brand-flow-frame";
 import { useSession } from "./session-provider";
@@ -31,7 +32,8 @@ const navIcons: Record<VendorNavItem["label"], typeof LayoutDashboard> = {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { viewer, setActor, hydrated } = useSession();
+  const { viewer, setActor, hydrated, graph, brand } = useSession();
+  const customerOption = viewingAsCustomerLabel(viewerForActor("customer", brand, graph).name);
   const breadcrumbs = breadcrumbForPath(pathname, viewer.actor);
   const brandFlow = isBrandFlowPath(pathname, viewer.actor);
   const navItems = navItemsForActor(viewer.actor);
@@ -40,7 +42,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (next === viewer.actor) return;
     setActor(next);
     // This dropdown is the only control that navigates when the viewer changes.
-    router.push(next === "cpm" ? "/customer" : "/sessions");
+    router.push(isCustomerViewer(next) ? "/customer" : "/sessions");
   }
 
   // The stored viewer is unknown until hydration. Painting the partner default
@@ -50,7 +52,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="md-shell">
       <header className="md-top-app-bar sticky top-0 z-50 flex h-16 items-center gap-4 px-4 md:px-6">
-        <Link href={viewer.actor === "cpm" ? "/customer" : "/"} className="flex items-center gap-3 rounded-[var(--md-sys-shape-small)]">
+        <Link href={isCustomerViewer(viewer.actor) ? "/customer" : "/"} className="flex items-center gap-3 rounded-[var(--md-sys-shape-small)]">
           <span className="md-label-large grid size-10 place-items-center rounded-[var(--md-sys-shape-large)] bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)]">PN</span>
           <span>
             <span className="md-title-medium block">Partner network</span>
@@ -68,7 +70,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           >
             <option value="pdm">Priya Raghavan · PDM</option>
             <option value="partner">Ravi Menon · partner</option>
-            <option value="cpm">Marcus Hale · customer</option>
+            <option value="customer">{customerOption}</option>
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-3 size-4 text-[var(--md-sys-color-on-surface-variant)]" />
         </div>

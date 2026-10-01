@@ -8,9 +8,10 @@ import { CustomerAccountPending } from "@/components/customer-account-pending";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useSession } from "@/components/session-provider";
 import { UnavailableControl } from "@/components/unavailable-control";
-import { pilotReadinessCopy } from "@/lib/pilot-readiness";
-import { patterns } from "@/lib/seed";
-import { canFlagReferenceStory, pilotNextStepCopy, pilotPickTitle, pilotScopeLine, sessionHasNamedCompany } from "@/lib/session";
+import { ThreeDayShapeList } from "@/components/what-the-three-days-will-be";
+import { pilotReadinessItems } from "@/lib/pilot-readiness";
+import { patterns, type Actor, type SessionGraph } from "@/lib/seed";
+import { canFlagReferenceStory, isCustomerViewer, pilotNextStepCopy, pilotScopeLine, pilotSpecUseCase, sampleRunEntryReady, sampleRunStatusLabel, sessionHasNamedCompany, showsSampleRunLink } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 const enableList = `# Enable list — customer cloud account
@@ -31,11 +32,27 @@ const services = [
   ["Extraction worker", "Runs extraction against the agreed sample."],
 ];
 
+function SampleRunEntry({ graph, actor }: { graph: SessionGraph; actor: Actor }) {
+  if (!sampleRunEntryReady(graph)) return null;
+  if (showsSampleRunLink(actor, graph)) {
+    const label = graph.hackathon?.booked ? "Preview day two" : "Try it on eight sample claims";
+    return (
+      <p className="mt-1">
+        <Link href="/try" className="text-sm underline underline-offset-2">{label}</Link>
+      </p>
+    );
+  }
+  if (actor === "pdm") {
+    return <p className="mt-1 text-sm text-black/70">{sampleRunStatusLabel(graph)}</p>;
+  }
+  return null;
+}
+
 export default function PilotSpecPage() {
   const { graph, brand, viewer } = useSession();
   const [copied, setCopied] = useState(false);
   const [briefCopied, setBriefCopied] = useState(false);
-  if (viewer.actor === "cpm" && !sessionHasNamedCompany(graph)) {
+  if (isCustomerViewer(viewer.actor) && !sessionHasNamedCompany(graph)) {
     return <CustomerAccountPending message="This is written once your account is in the session." />;
   }
   const pattern = patterns.find((item) => item.id === graph.session.patternId)!;
@@ -45,8 +62,7 @@ export default function PilotSpecPage() {
   const constraintAttribution = compliance && compliancePerson
     ? `${compliancePerson.name}, ${compliancePerson.role}`
     : "agreed in session · no named confirmer";
-  // Once the room picks the pilot at the showcase, that solution is the use case.
-  const useCase = pilotPickTitle(graph) ?? (graph.outcome.useCase || "Not captured");
+  const useCase = pilotSpecUseCase(graph);
   const scopeLine = pilotScopeLine(graph);
   const constraint = (compliance?.text ?? graph.outcome.constraint) || "Not captured";
   const nextStep = pilotNextStepCopy(graph) || "Not captured";
@@ -87,7 +103,7 @@ export default function PilotSpecPage() {
           <Button onClick={copyBrief} className="bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]">
             {briefCopied ? <Check /> : <Clipboard />}{briefCopied ? "Setup brief copied" : "Copy setup brief"}
           </Button>
-          {viewer.actor !== "cpm" && (
+          {!isCustomerViewer(viewer.actor) && (
             <Link href="/telemetry" className={cn(buttonVariants({ variant: "outline" }), "border-black/30 bg-[#f4f4f1] hover:bg-black/[.06]")}>
               View telemetry <ArrowRight />
             </Link>
@@ -120,7 +136,14 @@ export default function PilotSpecPage() {
               <div key={term} className="bg-white p-4"><dt className="text-xs font-medium text-black/45">{term}</dt><dd className="mt-1 text-sm leading-6">{detail}</dd></div>
             ))}
           </dl>
-          <p className="mt-4 text-sm text-amber-800">{pilotReadinessCopy}</p>
+          <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-amber-800">
+            {pilotReadinessItems.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+          <h3 id="pilot-spec-three-days" className="mt-6 text-base font-semibold">What the three days will be.</h3>
+          <ThreeDayShapeList
+            labelledBy="pilot-spec-three-days"
+            afterDay={{ "Day 2": <SampleRunEntry graph={graph} actor={viewer.actor} /> }}
+          />
         </section>
 
         {canFlagReferenceStory(viewer.actor) && (

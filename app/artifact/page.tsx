@@ -16,7 +16,7 @@ import { withBrandPeople } from "@/lib/brands";
 import { componentMonthlyTotal, ledgerAnnualTotal, ledgerMonthlyTotal } from "@/lib/cost-model";
 import type { CostComponent } from "@/lib/seed";
 import { formatCurrency, formatPreciseCurrency } from "@/lib/value";
-import {
+import { isCustomerViewer,
   artifactActions,
   artifactHeadline,
   artifactLimitsCopy,
@@ -60,7 +60,7 @@ function componentArithmetic(component: CostComponent) {
 
 export default function ArtifactPage() {
   const { graph, brand, viewer, canEditSession, bookHackathon } = useSession();
-  if (viewer.actor === "cpm" && !sessionHasNamedCompany(graph)) {
+  if (isCustomerViewer(viewer.actor) && !sessionHasNamedCompany(graph)) {
     return <CustomerAccountPending message="This is written once your account is in the session." />;
   }
   const people = withBrandPeople(brand);
@@ -177,7 +177,7 @@ export default function ArtifactPage() {
           key={graph.ranking.selected.join("-")}
           graph={graph}
           selectedTitles={selectedSolutions(graph).map((solution) => solution.title)}
-          canEdit={canEditSession || viewer.actor === "cpm"}
+          canEdit={canEditSession || isCustomerViewer(viewer.actor)}
           bookHackathon={bookHackathon}
         />
       )}

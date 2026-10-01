@@ -8,7 +8,7 @@ import { Check, ChevronDown } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { brands, withBrandPeople } from "@/lib/brands";
 import type { Mechanic } from "@/lib/seed";
-import { customerFormatLabels, customerHasAccount } from "@/lib/session";
+import { isCustomerViewer, customerFormatLabels, customerHasAccount } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { mergesSessionHeader } from "@/lib/vendor-shell";
 import { useSession } from "./session-provider";
@@ -31,7 +31,7 @@ export function BrandFlowFrame({ children }: { children: React.ReactNode }) {
   const { brand, brandId, setBrandId, graph, setMechanic, canEditSession, viewer } = useSession();
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const sessionHeader = mergesSessionHeader(pathname);
-  const customer = viewer.actor === "cpm";
+  const customer = isCustomerViewer(viewer.actor);
   const showAccount = sessionHeader && (!customer || customerHasAccount(viewer.actor, graph));
   const people = withBrandPeople(brand);
   const facilitation =

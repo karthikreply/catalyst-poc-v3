@@ -10,6 +10,7 @@ import type { Mechanic } from "@/lib/seed";
 import {
   agendaForSession,
   customerFormatLabels,
+  customerGreeting,
   customerHasAccount,
   customerHomeSummary,
   customerSampleRunLabel,
@@ -17,6 +18,7 @@ import {
   handoffLabel,
   isCustomerAttending,
   isCustomerViewer,
+  showsSampleRunLink,
 } from "@/lib/session";
 import { formatCurrency } from "@/lib/value";
 
@@ -35,8 +37,9 @@ export default function CustomerHomePage() {
   const attending = isCustomerAttending(viewer.actor, graph);
   const handoff = handoffLabel(graph.session.handoff);
   const sampleRunLabel = isCustomerViewer(viewer.actor) ? customerSampleRunLabel(graph) : null;
+  const sampleRunHref = showsSampleRunLink(viewer.actor, graph) ? "/try" : undefined;
 
-  if (viewer.actor !== "cpm") {
+  if (!isCustomerViewer(viewer.actor)) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-12 md:px-8">
         <h1 className="md-headline-medium">Customer home</h1>
@@ -53,7 +56,7 @@ export default function CustomerHomePage() {
     return (
       <div className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-12">
         <p className="md-label-large text-[var(--md-sys-color-primary)]">Customer</p>
-        <h1 className="md-display-small mt-2">Hello, {viewer.name.split(" ")[0]}</h1>
+        <h1 className="md-display-small mt-2">{customerGreeting(viewer.name)}</h1>
         <p className="md-body-large mt-3 max-w-2xl text-[var(--md-sys-color-on-surface-variant)]">
           You are attending. The pain is already on the account.
         </p>
@@ -65,7 +68,7 @@ export default function CustomerHomePage() {
             <SummaryItem term="Stage" detail={activeStep ? activeStep.title : "Underway"} />
             <SummaryItem term="Partner of record" detail={brand.partnerName} />
             <SummaryItem term="Handoff" detail={handoff} />
-            {sampleRunLabel && <SummaryItem term="Sample run" detail={sampleRunLabel} href="/try" />}
+            {sampleRunLabel && <SummaryItem term="Sample run" detail={sampleRunLabel} href={sampleRunHref} />}
           </dl>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link href="/run" className="md-button-filled">
@@ -103,7 +106,7 @@ export default function CustomerHomePage() {
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-12">
       <p className="md-label-large text-[var(--md-sys-color-primary)]">Customer</p>
-      <h1 className="md-display-small mt-2">Hello, {viewer.name.split(" ")[0]}</h1>
+      <h1 className="md-display-small mt-2">{customerGreeting(viewer.name)}</h1>
       <p className="md-body-large mt-3 max-w-2xl text-[var(--md-sys-color-on-surface-variant)]">
         Session progress and funding for this engagement only.
       </p>
@@ -146,7 +149,7 @@ export default function CustomerHomePage() {
           )}
           <SummaryItem term="Funding" detail={summary.funding} />
           <SummaryItem term="Handoff" detail={handoff} />
-          {sampleRunLabel && <SummaryItem term="Sample run" detail={sampleRunLabel} href="/try" />}
+          {sampleRunLabel && <SummaryItem term="Sample run" detail={sampleRunLabel} href={sampleRunHref} />}
         </dl>
         {(summary.continueHref || hasAccount) && (
           <div className="mt-6 flex flex-wrap gap-3">

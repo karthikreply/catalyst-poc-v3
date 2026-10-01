@@ -47,7 +47,7 @@ describe("customer without an account", () => {
         session: { ...initialSessionGraph.session, scopeMode: "cold", customerName: "  " },
       },
       brand: brands.cdw,
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Platform vendor" },
       markHackathonCalendarAdded: vi.fn(),
     });
     const markup = renderToStaticMarkup(<ArtifactPage />);
@@ -68,7 +68,7 @@ describe("customer without an account", () => {
     useSessionMock.mockReturnValue({
       graph: booked,
       brand: brands.cdw,
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Platform vendor" },
       canEditSession: false,
       bookHackathon: vi.fn(),
       setPilotPick: vi.fn(),
@@ -97,7 +97,7 @@ describe("customer without an account", () => {
         session: { ...initialSessionGraph.session, scopeMode: "cold", customerName: "Reply" },
       },
       brand: brands.cdw,
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Reply" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Reply" },
       canEditSession: true,
       bookHackathon: vi.fn(),
       markHackathonCalendarAdded: vi.fn(),
@@ -264,7 +264,7 @@ describe("the three days, on the booked business case", () => {
   };
   const partner = { actor: "partner", name: "Ravi Menon", org: "CDW" };
   const pdm = { actor: "pdm", name: "Priya Raghavan", org: "Google" };
-  const customer = { actor: "cpm", name: "Marcus Hale", org: "Reply" };
+  const customer = { actor: "customer", name: "Dana Reyes", org: "Reply" };
   const bookedHeartland = bookHackathon(selectThree(), draft);
   const bookedCold = bookHackathon(
     selectThree(applyColdScope(initialSessionGraph, { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees)),
@@ -276,7 +276,7 @@ describe("the three days, on the booked business case", () => {
       graph,
       brand: brands.cdw,
       viewer,
-      canEditSession: viewer.actor !== "cpm",
+      canEditSession: viewer.actor !== "customer",
       bookHackathon: vi.fn(),
       setPilotPick: vi.fn(),
       markHackathonCalendarAdded: vi.fn(),

@@ -154,7 +154,7 @@ function hydrateHandoff(value: unknown): Handoff | null {
   return {
     kind: candidate.kind as HandoffKind,
     at: typeof candidate.at === "string" ? candidate.at : "",
-    sponsor: typeof candidate.sponsor === "string" ? candidate.sponsor : "",
+    sponsor: typeof candidate.sponsor === "string" ? migrateActorToken(candidate.sponsor) : "",
   };
 }
 
@@ -197,18 +197,22 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
       customerDoor: value.session.customerDoor === true,
       handoff: hydrateHandoff(value.session.handoff),
     },
-    valueInputs: legacyCold
+    valueInputs: migrateConfirmedBy(legacyCold
       ? emptyValueInputs(sessionId)
       : cold && !value.valueInputs?.length
         ? emptyValueInputs(sessionId)
-        : value.valueInputs ?? initialSessionGraph.valueInputs,
-    costComponents: legacyCold
+        : value.valueInputs ?? initialSessionGraph.valueInputs),
+    costComponents: migrateConfirmedBy(legacyCold
       ? emptyCostComponents()
       : cold && !value.costComponents?.length
         ? emptyCostComponents()
-        : value.costComponents ?? initialSessionGraph.costComponents,
+        : value.costComponents ?? initialSessionGraph.costComponents),
     agenda,
-    captures: legacyCold ? [] : value.captures ?? (cold ? [] : initialSessionGraph.captures),
+    captures: (legacyCold ? [] : value.captures ?? (cold ? [] : initialSessionGraph.captures)).map((capture) => (
+      capture.attributedTo === legacyCustomerActor
+        ? { ...capture, attributedTo: migrateActorToken(capture.attributedTo) }
+        : capture
+    )),
     partnerNotes: partnerNote ? [partnerNote] : [],
     attendees: cold
       ? value.attendees ?? []
@@ -237,7 +241,7 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
           meetAdded: Boolean(value.hackathon.meetAdded),
         }
       : null,
-    votes: value.votes && typeof value.votes === "object" ? value.votes : {},
+    votes: migrateVoteKeys(value.votes),
     sampleRun: hydrateSampleRun(value.sampleRun),
   };
 }
@@ -276,7 +280,7 @@ function hydrateSampleRun(value: unknown): SampleRun | null {
     status,
     marks,
     position,
-    reviewedBy: typeof candidate.reviewedBy === "string" ? candidate.reviewedBy : null,
+    reviewedBy: typeof candidate.reviewedBy === "string" ? migrateActorToken(candidate.reviewedBy) : null,
     at: typeof candidate.at === "string" ? candidate.at : null,
   };
 }
@@ -551,7 +555,7 @@ export type CustomerHomeSummary = {
 
 /** The customer has named a company in cold scope. A seeded graph is not their account. */
 export function customerHasAccount(actor: Actor, graph: SessionGraph) {
-  return actor === "cpm" && graph.session.scopeMode === "cold" && graph.session.customerName.trim().length > 0;
+  return isCustomerViewer(actor) && graph.session.scopeMode === "cold" && graph.session.customerName.trim().length > 0;
 }
 
 /** Company name already on this session. Seeded Heartland counts; a blank cold start does not. */
@@ -660,18 +664,70 @@ Regards,
 Priya Raghavan · Platform vendor`;
 }
 
-export function viewerForActor(actor: Actor, brand: Brand): Viewer {
+const legacyCustomerActor = "c\u0070m";
+
+export function migrateStoredActor(value: string | null): Actor | null {
+  if (value === legacyCustomerActor || value === "customer") return "customer";
+  if (value === "pdm" || value === "partner") return value;
+  return null;
+}
+
+function migrateActorToken(value: string) {
+  return value === legacyCustomerActor ? "customer" : value;
+}
+
+function migrateVoteKeys(votes: unknown): Record<string, string> {
+  if (!votes || typeof votes !== "object") return {};
+  const next: Record<string, string> = {};
+  for (const [key, solutionId] of Object.entries(votes)) {
+    if (typeof solutionId !== "string") continue;
+    next[migrateActorToken(key)] = solutionId;
+  }
+  return next;
+}
+
+function migrateConfirmedBy<T extends { confirmedBy: string | null }>(rows: T[]): T[] {
+  return rows.map((row) => (
+    row.confirmedBy === legacyCustomerActor
+      ? { ...row, confirmedBy: "customer" }
+      : row
+  ));
+}
+
+export function customerGreeting(name: string) {
+  const first = name.trim().split(/\s+/)[0];
+  return first ? `Hello, ${first}` : "Welcome";
+}
+
+export function viewingAsCustomerLabel(name: string) {
+  const trimmed = name.trim();
+  return trimmed ? `${trimmed} · customer` : "Customer";
+}
+
+function customerPerson(graph: SessionGraph): { name: string; org: string } {
+  if (graph.session.scopeMode !== "cold") {
+    return { name: "Dana Reyes", org: "Heartland Mutual Insurance" };
+  }
+  const entered = [...graph.coldAttendees, ...graph.attendees].find((person) => person.name.trim());
+  return {
+    name: entered?.name.trim() ?? "",
+    org: graph.session.customerName.trim(),
+  };
+}
+
+export function viewerForActor(actor: Actor, brand: Brand, graph: SessionGraph = initialSessionGraph): Viewer {
   if (actor === "pdm") {
     return { actor, name: "Priya Raghavan", org: "Platform vendor" };
   }
-  if (actor === "cpm") {
-    return { actor, name: "Marcus Hale", org: "Platform vendor" };
+  if (isCustomerViewer(actor)) {
+    const person = customerPerson(graph);
+    return { actor, name: person.name, org: person.org };
   }
   return { actor, name: "Ravi Menon", org: brand.partnerName };
 }
 
 export function isCustomerViewer(actor: Actor) {
-  return actor === "cpm";
+  return actor === "customer";
 }
 
 export function isSessionReadOnly(actor: Actor, graph: SessionGraph) {
@@ -706,7 +762,7 @@ export function canViewPartnerScope(actor: Actor) {
 
 /** The partner or the customer books the three days. The PDM reviews the shortlist. */
 export function canBookHackathon(actor: Actor) {
-  return actor === "partner" || actor === "cpm";
+  return actor === "partner" || isCustomerViewer(actor);
 }
 
 export function bindAnnualValue(graph: SessionGraph): SessionGraph {
@@ -858,7 +914,7 @@ export function artifactPilotScopeCopy(graph: SessionGraph, brand: Brand) {
 }
 
 export function canFlagReferenceStory(actor: Actor) {
-  return actor !== "partner";
+  return actor === "pdm";
 }
 
 export function artifactActions(actor: Actor, qualified: boolean, delivery: Delivery) {
@@ -876,7 +932,7 @@ export function artifactActions(actor: Actor, qualified: boolean, delivery: Deli
       tertiary: "Contact my partner manager with this business case",
     };
   }
-  if (actor === "cpm") {
+  if (isCustomerViewer(actor)) {
     return { primary: null, secondary: null, tertiary: null };
   }
   return {
@@ -1060,6 +1116,15 @@ export function bookedSolutionPains(graph: SessionGraph): BookedSolutionPain[] {
   });
 }
 
+/** Pilot spec use case: the picked title, else the booked titles, else not captured. Never the raw outcome fragment. */
+export function pilotSpecUseCase(graph: SessionGraph): string {
+  const picked = pilotPickTitle(graph);
+  if (picked) return picked;
+  const titles = bookedSolutionTitles(graph);
+  if (titles.length) return titles.join(", ");
+  return "Not captured yet";
+}
+
 /** Title of the solution named as the six-week pilot at the showcase. Null until picked. */
 export function pilotPickTitle(graph: SessionGraph): string | null {
   const pick = graph.outcome.pilotPick;
@@ -1210,7 +1275,7 @@ export type AccountLookupResult =
 export function lookupAccount(query: string, actor: Actor): AccountLookupResult {
   const trimmed = query.trim();
   const normalized = trimmed.toLowerCase();
-  if (actor === "cpm") {
+  if (isCustomerViewer(actor)) {
     return { hit: false, query: trimmed, customerDoor: true };
   }
   if (normalized === "heartland" || normalized === "heartland mutual insurance") {
@@ -1309,6 +1374,43 @@ export function sampleRunSolutionReady(graph: SessionGraph) {
   return Boolean(solution && rankOneSolutionId(graph) === solution.id);
 }
 
+/**
+ * Solution the sample-run entry points follow.
+ * Picked pilot when one is set, else the booked rank-1, else rank-1.
+ */
+export function sampleRunEntrySolutionId(graph: SessionGraph): string | null {
+  const booked = graph.hackathon?.booked ? graph.hackathon.solutionIds : [];
+  const pick = graph.outcome.pilotPick;
+  if (pick && booked.includes(pick)) return pick;
+  if (booked.length) {
+    return graph.ranking.order.find((id) => booked.includes(id)) ?? booked[0];
+  }
+  return rankOneSolutionId(graph);
+}
+
+/** True when that solution is the extraction sample set, and the shortlist is locked or already booked. */
+export function sampleRunEntryReady(graph: SessionGraph) {
+  const id = sampleRunEntrySolutionId(graph);
+  const extraction = documentExtractionSolution(graph);
+  if (!id || !extraction || id !== extraction.id) return false;
+  return Boolean(graph.hackathon?.booked || graph.ranking.locked);
+}
+
+/** Customer, and the partner on a facilitated session that is not the customer door. */
+export function showsSampleRunLink(actor: Actor, graph: SessionGraph) {
+  if (!sampleRunEntryReady(graph)) return false;
+  if (isCustomerViewer(actor)) return true;
+  return actor === "partner" && graph.session.delivery === "facilitated" && graph.session.customerDoor !== true;
+}
+
+export function sampleRunStatusLabel(graph: SessionGraph): string {
+  const run = graph.sampleRun;
+  if (!run || run.status === "not-run") return "Not run yet";
+  const { reviewed, fix } = sampleRunTallies(run.marks);
+  if (run.status === "reviewed") return `Reviewed 8 of 8 · ${fix} need a fix`;
+  return `Reviewed ${reviewed} of 8`;
+}
+
 export function showsTryItCard(graph: SessionGraph) {
   return graph.ranking.locked && sampleRunSolutionReady(graph);
 }
@@ -1325,12 +1427,8 @@ export function liveSampleRunFlag(graph: SessionGraph) {
 }
 
 export function customerSampleRunLabel(graph: SessionGraph): string | null {
-  if (!showsTryItCard(graph) && !sampleRunHasStarted(graph)) return null;
-  if (!graph.sampleRun || !sampleRunHasStarted(graph)) return "Not run yet";
-  if (graph.sampleRun.status === "reviewed") {
-    return `${sampleRunTallies(graph.sampleRun.marks).right} of 8 look right`;
-  }
-  return "In progress";
+  if (!sampleRunEntryReady(graph)) return null;
+  return sampleRunStatusLabel(graph);
 }
 
 export function releaseStaleSampleRun(graph: SessionGraph): SessionGraph {
