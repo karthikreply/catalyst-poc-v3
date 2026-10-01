@@ -7,7 +7,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialSessionGraph } from "@/lib/seed";
 import { applyDeliveryMode, bookHackathon, rankedSolutions, toggleSelected } from "@/lib/session";
 
-import { SessionProvider, useSession } from "./session-provider";
+const shellNav = vi.hoisted(() => ({
+  pathname: "/customer",
+  push: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => shellNav.pathname,
+  useRouter: () => ({ push: shellNav.push, replace: vi.fn() }),
+}));
+
+import { AppShell } from "./app-shell";
+import { GRAPH_KEY, SessionProvider, useSession } from "./session-provider";
 
 function SessionActionsProbe() {
   const {
@@ -62,6 +73,18 @@ function renderForActor(actor: "pdm" | "partner" | "cpm", graph = initialSession
     <SessionProvider>
       <SessionActionsProbe />
     </SessionProvider>,
+  );
+}
+
+function SamplePersistProbe() {
+  const { graph, setActor, startSampleRun, markSampleClaim } = useSession();
+  return (
+    <>
+      <output aria-label="sample-verdict">{graph.sampleRun?.marks["claim-1"]?.verdict ?? "none"}</output>
+      <button type="button" onClick={() => startSampleRun()}>Start sample</button>
+      <button type="button" onClick={() => markSampleClaim("claim-1", "right", [])}>Mark sample claim</button>
+      <button type="button" onClick={() => setActor("cpm")}>Switch to customer</button>
+    </>
   );
 }
 
@@ -282,5 +305,50 @@ describe("SessionProvider action permissions", () => {
       fireEvent.click(screen.getByRole("button", { name: "Hand off DAF" }));
       expect(screen.getByLabelText("handoff")).toHaveTextContent("none");
     });
+  });
+
+  it("keeps the stored graph key", () => {
+    expect(GRAPH_KEY).toBe("catalyst-session-graph-v4");
+  });
+
+  it("keeps sample marks when the viewer changes", async () => {
+    render(
+      <SessionProvider>
+        <SamplePersistProbe />
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Start sample" })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: "Start sample" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark sample claim" }));
+    await waitFor(() => expect(screen.getByLabelText("sample-verdict")).toHaveTextContent("right"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch to customer" }));
+    expect(screen.getByLabelText("sample-verdict")).toHaveTextContent("right");
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem(GRAPH_KEY) ?? "{}") as { sampleRun?: { marks?: Record<string, { verdict?: string }> } };
+      expect(saved.sampleRun?.marks?.["claim-1"]?.verdict).toBe("right");
+    });
+  });
+
+  it("does not replace a stored customer with the partner on customer pages", async () => {
+    for (const pathname of ["/customer", "/artifact", "/rank"]) {
+      shellNav.pathname = pathname;
+      shellNav.push.mockClear();
+      sessionStorage.setItem("catalyst-viewer-actor", "cpm");
+      localStorage.setItem(GRAPH_KEY, JSON.stringify(initialSessionGraph));
+      const view = render(
+        <SessionProvider>
+          <AppShell><p>body</p></AppShell>
+        </SessionProvider>,
+      );
+      await waitFor(() => expect(view.getByLabelText("Viewing as")).toHaveValue("cpm"));
+      expect(shellNav.push).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem("catalyst-viewer-actor")).toBe("cpm");
+      expect(view.queryByText("My sessions")).toBeNull();
+      expect(view.getAllByText("Your engagement").length).toBeGreaterThan(0);
+      expect(view.getByRole("link", { name: /Partner network/ })).toHaveAttribute("href", "/customer");
+      view.unmount();
+    }
   });
 });

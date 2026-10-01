@@ -7,12 +7,16 @@ import { brands } from "@/lib/brands";
 import { initialSessionGraph } from "@/lib/seed";
 import {
   applyColdScope,
+  applyDeliveryMode,
   applyMechanic,
   bookHackathon,
   bookedSolutionPains,
   catalogSolutionById,
   coldScopeDefaults,
+  lockRanking,
+  moveSolution,
   rankedSolutions,
+  startSampleRun,
   toggleSelected,
 } from "@/lib/session";
 
@@ -237,7 +241,24 @@ describe("Rank page", () => {
     partnerView.unmount();
 
     setPilotPick.mockClear();
-    useSessionMock.mockReturnValue({ ...session, viewer: { actor: "cpm", name: "Marcus Hale", org: "Heartland" } });
+    useSessionMock.mockReturnValue({
+      ...session,
+      canEditSession: false,
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Heartland" },
+    });
+    const attendingView = render(<RankPage />);
+    expect(attendingView.queryByRole("button", { name: /as the pilot/ })).toBeNull();
+    expect(attendingView.getByText("Pilot not yet chosen. The room names it at the showcase.")).toBeTruthy();
+    expect(setPilotPick).not.toHaveBeenCalled();
+    attendingView.unmount();
+
+    setPilotPick.mockClear();
+    useSessionMock.mockReturnValue({
+      ...session,
+      graph: applyDeliveryMode(booked, "self-service"),
+      canEditSession: true,
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Heartland" },
+    });
     const customerView = render(<RankPage />);
     fireEvent.click(customerView.getByRole("button", { name: `Choose ${title} as the pilot` }));
     expect(setPilotPick).toHaveBeenCalledWith(booked.hackathon!.solutionIds[0]);
@@ -384,4 +405,72 @@ describe("Rank page", () => {
     expect(markup).not.toContain("Hackathon date");
     expect(markup).not.toContain("A PDM does not book it.");
   });
+
+  it("offers Try it as the primary action once the extraction solution is locked, then swaps after a run", () => {
+    const locked = lockRanking(selectThree());
+    useSessionMock.mockReturnValue({
+      graph: locked,
+      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      canEditSession: true,
+      moveSolution: vi.fn(),
+      toggleSelected: vi.fn(),
+      castVote: vi.fn(),
+      lockRanking: vi.fn(),
+      unlockRanking: vi.fn(),
+    });
+    expect(primaryTryAction(renderToStaticMarkup(<RankPage />))).toBe("try");
+    expect(renderToStaticMarkup(<RankPage />)).toContain('href="/try"');
+    expect(renderToStaticMarkup(<RankPage />)).toContain('href="/artifact"');
+
+    const ran = startSampleRun(locked, "partner", "Ravi Menon", "2026-10-01T00:00:00.000Z");
+    useSessionMock.mockReturnValue({
+      graph: ran,
+      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      canEditSession: true,
+      moveSolution: vi.fn(),
+      toggleSelected: vi.fn(),
+      castVote: vi.fn(),
+      lockRanking: vi.fn(),
+      unlockRanking: vi.fn(),
+    });
+    expect(primaryTryAction(renderToStaticMarkup(<RankPage />))).toBe("book");
+  });
+
+  it("hides the try card until the ranking is locked, and when rank 1 is not extraction", () => {
+    useSessionMock.mockReturnValue({
+      graph: selectThree(),
+      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      canEditSession: true,
+      moveSolution: vi.fn(),
+      toggleSelected: vi.fn(),
+      castVote: vi.fn(),
+      lockRanking: vi.fn(),
+      unlockRanking: vi.fn(),
+    });
+    expect(renderToStaticMarkup(<RankPage />)).not.toContain("data-try-card");
+
+    const moved = moveSolution(initialSessionGraph, rankedSolutions(initialSessionGraph)[0].id, "down");
+    const other = lockRanking(selectThree(moved));
+    useSessionMock.mockReturnValue({
+      graph: other,
+      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      canEditSession: true,
+      moveSolution: vi.fn(),
+      toggleSelected: vi.fn(),
+      castVote: vi.fn(),
+      lockRanking: vi.fn(),
+      unlockRanking: vi.fn(),
+    });
+    expect(renderToStaticMarkup(<RankPage />)).not.toContain("data-try-card");
+    expect(renderToStaticMarkup(<RankPage />)).not.toContain("Try it on sample claims");
+  });
 });
+
+function primaryTryAction(markup: string) {
+  const start = markup.indexOf("data-try-card");
+  const card = markup.slice(start, markup.indexOf("</section>", start));
+  const accent = card.indexOf("bg-[var(--brand-accent)]");
+  const tryAt = card.indexOf("Try it on sample claims");
+  const bookAt = card.indexOf("Book the hackathon");
+  return Math.abs(accent - tryAt) < Math.abs(accent - bookAt) ? "try" : "book";
+}

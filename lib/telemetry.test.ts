@@ -9,6 +9,8 @@ import {
   mechanicConversion,
   recentTelemetryRows,
   scopeTelemetry,
+  sampleRunBookingSummary,
+  sampleRunColumnLabel,
   summarizeTelemetry,
   telemetryBenchmarks,
   type TelemetrySession,
@@ -145,5 +147,29 @@ describe("telemetryBenchmarks", () => {
     expect(recent.filter((row) => row.delivery === "self-service")).toHaveLength(4);
     expect(recent.filter((row) => row.delivery === "self-service" && row.qualified).length).toBeGreaterThanOrEqual(3);
     expect(recent.some((row) => row.closeStyle === "board-slide")).toBe(true);
+  });
+
+  it("derives sample runs without changing booked or pilot counts", () => {
+    const rows = buildTelemetrySessions();
+    const again = buildTelemetrySessions();
+    expect(rows.map((row) => row.sampleRun)).toEqual(again.map((row) => row.sampleRun));
+    expect(rows.some((row) => row.sampleRun)).toBe(true);
+    expect(rows.some((row) => !row.sampleRun)).toBe(true);
+
+    const summary = summarizeTelemetry(rows);
+    const flipped = rows.map((row) => ({ ...row, sampleRun: !row.sampleRun }));
+    expect(summarizeTelemetry(flipped)).toEqual(summary);
+
+    const booking = sampleRunBookingSummary(rows);
+    expect(booking.ran).toBe(rows.filter((row) => row.sampleRun).length);
+    expect(booking.bookedAfter).toBe(rows.filter((row) => row.sampleRun && (row.outcome === "Hackathon booked" || row.outcome === "Pilot signed")).length);
+    expect(booking.bookedAfter).toBeLessThanOrEqual(booking.ran);
+    expect(sampleRunColumnLabel(true)).toBe("Yes");
+    expect(sampleRunColumnLabel(false)).toBe("—");
+    expect(sampleRunBookingSummary([
+      { sampleRun: true, outcome: "Pilot signed" },
+      { sampleRun: true, outcome: "Run" },
+      { sampleRun: false, outcome: "Hackathon booked" },
+    ])).toEqual({ ran: 2, bookedAfter: 1 });
   });
 });

@@ -25,7 +25,9 @@ const steps = [
 export function BrandFlowFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const funding = pathname.startsWith("/funding");
-  const activeIndex = Math.max(0, steps.findIndex((step) => pathname.startsWith(step.href)));
+  const tryIt = pathname.startsWith("/try");
+  const activeIndex = tryIt ? -1 : Math.max(0, steps.findIndex((step) => pathname.startsWith(step.href)));
+  const nextStep = activeIndex < 0 ? { href: "/rank", label: "Rank" } : steps[(activeIndex + 1) % steps.length];
   const { brand, brandId, setBrandId, graph, setMechanic, canEditSession, viewer } = useSession();
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const sessionHeader = mergesSessionHeader(pathname);
@@ -152,8 +154,8 @@ export function BrandFlowFrame({ children }: { children: React.ReactNode }) {
       <main>{children}</main>
       {!(customer && sessionHeader) && (
         <div className="fixed bottom-3 left-1/2 z-40 -translate-x-1/2 md:hidden">
-          <Link href={funding ? "/artifact" : steps[(activeIndex + 1) % steps.length].href} className={buttonVariants({ size: "sm", className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>
-            {funding ? "Back to business case" : `Next: ${steps[(activeIndex + 1) % steps.length].label}`}
+          <Link href={funding ? "/artifact" : nextStep.href} className={buttonVariants({ size: "sm", className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>
+            {funding ? "Back to business case" : `Next: ${nextStep.label}`}
           </Link>
         </div>
       )}

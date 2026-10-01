@@ -35,14 +35,20 @@ import {
   castVote as castVoteInGraph,
   graphForActor,
   hydrateSessionGraph,
+  canMutateSampleRun,
+  canSetSamplePosition,
   isSessionReadOnly,
   lockRanking as lockRankingInGraph,
+  markSampleClaim as markSampleClaimInGraph,
   moveSolution as moveSolutionInGraph,
   recordHandoff as recordHandoffInGraph,
   restoreSeededGraph,
   savePartnerNote as savePartnerNoteInGraph,
   saveSessionOutcome as saveSessionOutcomeInGraph,
   setPilotPick as setPilotPickInGraph,
+  setSamplePosition as setSamplePositionInGraph,
+  startOverSampleRun as startOverSampleRunInGraph,
+  startSampleRun as startSampleRunInGraph,
   toggleSelected as toggleSelectedInGraph,
   unlockRanking as unlockRankingInGraph,
   updateCapture as updateCaptureInGraph,
@@ -93,12 +99,16 @@ type SessionContextValue = {
   setPilotPick: (solutionId: string) => void;
   recordHandoff: (kind: HandoffKind) => void;
   chooseCustomerFormat: (mechanic: Mechanic) => void;
+  startSampleRun: () => void;
+  markSampleClaim: (claimId: string, verdict: "right" | "fix", fields: string[], advance?: boolean) => void;
+  setSamplePosition: (position: number) => void;
+  startOverSampleRun: () => void;
   canEditSession: boolean;
   hydrated: boolean;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
-const GRAPH_KEY = "catalyst-session-graph-v4";
+export const GRAPH_KEY = "catalyst-session-graph-v4";
 const BRAND_KEY = "catalyst-brand";
 const ACTOR_KEY = "catalyst-viewer-actor";
 const SEEDED_GRAPH_KEY = "catalyst-seeded-graph-v4";
@@ -420,6 +430,26 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setGraph((current) => chooseCustomerFormatInGraph(current, mechanic));
   }
 
+  function startSampleRun() {
+    if (!canMutateSampleRun(actor, graph)) return;
+    setGraph((current) => startSampleRunInGraph(current, actor, viewer.name, new Date().toISOString()));
+  }
+
+  function markSampleClaim(claimId: string, verdict: "right" | "fix", fields: string[], advance = true) {
+    if (!canMutateSampleRun(actor, graph)) return;
+    setGraph((current) => markSampleClaimInGraph(current, actor, claimId, verdict, fields, viewer.name, new Date().toISOString(), advance));
+  }
+
+  function setSamplePosition(position: number) {
+    if (!canSetSamplePosition(actor, graph)) return;
+    setGraph((current) => setSamplePositionInGraph(current, actor, position));
+  }
+
+  function startOverSampleRun() {
+    if (!canMutateSampleRun(actor, graph)) return;
+    setGraph((current) => startOverSampleRunInGraph(current, actor));
+  }
+
   const value = {
     graph,
     brandId,
@@ -459,6 +489,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setPilotPick,
     recordHandoff,
     chooseCustomerFormat,
+    startSampleRun,
+    markSampleClaim,
+    setSamplePosition,
+    startOverSampleRun,
     canEditSession,
     hydrated,
   };

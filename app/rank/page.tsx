@@ -12,10 +12,25 @@ import {
   canBookHackathon,
   latestStepCapture,
   rankedSolutions,
+  sampleRunHasStarted,
   selectedSolutions,
+  showsTryItCard,
   voteTallies,
 } from "@/lib/session";
 import { cn } from "@/lib/utils";
+
+function rankActionClass(primary: boolean) {
+  return primary
+    ? buttonVariants({ className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })
+    : cn(buttonVariants({ variant: "outline" }), "border-black/30 bg-[#f4f4f1] hover:bg-black/[.06]");
+}
+
+function RankBookAction({ mayBook, primary, selectedCount }: { mayBook: boolean; primary: boolean; selectedCount: number }) {
+  if (selectedCount === 3 && mayBook) {
+    return <Link href="/artifact" className={rankActionClass(primary)}>Book the hackathon</Link>;
+  }
+  return <Button type="button" disabled className="opacity-50">Book the hackathon</Button>;
+}
 
 export default function RankPage() {
   const {
@@ -39,6 +54,8 @@ export default function RankPage() {
   const canSelect = canEditSession || viewer.actor === "cpm";
   const canReorder = canEditSession;
   const mayBook = canBookHackathon(viewer.actor);
+  const showTryCard = showsTryItCard(graph);
+  const tried = sampleRunHasStarted(graph);
   const customerViewer = viewer.actor === "cpm";
   const latestCapture = customerViewer ? latestStepCapture(graph) : null;
   const topThreeTitles = Array.isArray(graph.ranking.selected) && graph.ranking.selected.length
@@ -67,7 +84,7 @@ export default function RankPage() {
               <p role="status" className="mt-2 text-sm font-medium text-black">Booked · {graph.hackathon?.date}</p>
             )}
           </div>
-          {booked ? (
+          {showTryCard && !booked ? null : booked ? (
             <Link href="/artifact" className={buttonVariants({ className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>
               Open business case <ArrowRight />
             </Link>
@@ -79,6 +96,24 @@ export default function RankPage() {
             <Button type="button" disabled className="opacity-50">Book the hackathon</Button>
           )}
         </div>
+
+        {showTryCard && (
+          <section data-try-card className="mt-8 rounded-sm border border-black/10 bg-white p-6" aria-label="Try it on sample claims">
+            <div className="flex flex-wrap gap-3">
+              {tried ? (
+                <>
+                  <RankBookAction mayBook={mayBook} primary selectedCount={selectedCount} />
+                  <Link href="/try" className={rankActionClass(false)}>Try it on sample claims</Link>
+                </>
+              ) : (
+                <>
+                  <Link href="/try" className={rankActionClass(true)}>Try it on sample claims</Link>
+                  <RankBookAction mayBook={mayBook} primary={false} selectedCount={selectedCount} />
+                </>
+              )}
+            </div>
+          </section>
+        )}
 
         {booked && <HackathonThreeDays graph={graph} className="mt-8" />}
         {!booked && selectedCount === 3 && (

@@ -42,6 +42,10 @@ describe("vendor shell routing", () => {
     expect(breadcrumbForPath("/plan", "partner")).toEqual(["Partner network", "Value sessions", "Plan"]);
     expect(breadcrumbForPath("/rank", "pdm")).toEqual(["Partner network", "Value sessions", "Rank"]);
     expect(isBrandFlowPath("/rank", "partner")).toBe(true);
+    expect(isBrandFlowPath("/try", "partner")).toBe(true);
+    expect(isBrandFlowPath("/try", "cpm")).toBe(true);
+    expect(breadcrumbForPath("/try", "partner")).toEqual(["Partner network", "Value sessions", "Try it"]);
+    expect(breadcrumbForPath("/try/", "cpm")).toEqual(["Your engagement", "Value sessions", "Try it"]);
     expect(breadcrumbForPath("/funding", "partner")).toEqual(["Partner network", "Funding"]);
     expect(breadcrumbForPath("/telemetry", "pdm")).toEqual(["Partner network", "Telemetry"]);
     expect(breadcrumbForPath("/sessions", "partner")).toEqual(["Partner network", "My sessions"]);
