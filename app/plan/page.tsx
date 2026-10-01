@@ -4,21 +4,28 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, Clipboard, Clock, TriangleAlert } from "lucide-react";
 
+import { CustomerAccountPending } from "@/components/customer-account-pending";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { UnavailableControl } from "@/components/unavailable-control";
 import { useSession } from "@/components/session-provider";
-import { withBrandPeople } from "@/lib/brands";
-import { patterns, type CloseStyle, type Delivery, type Mechanic } from "@/lib/seed";
-import { agendaForSession, missingColdRoles, pdmPartnerInvitationCopy, preworkForMechanic } from "@/lib/session";
+import { withBrandPeople, type Brand } from "@/lib/brands";
+import { patterns, type CloseStyle, type Delivery, type Mechanic, type SessionGraph } from "@/lib/seed";
+import { agendaForSession, customerFormatLabels, customerHasAccount, missingColdRoles, pdmPartnerInvitationCopy, preworkForMechanic } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 const optionCardClass = "h-full rounded-sm border p-3 text-left text-sm disabled:cursor-not-allowed disabled:opacity-60";
 const selectedOptionClass = "border-[var(--brand-accent)] bg-[color-mix(in_srgb,var(--brand-accent)_6%,white)]";
 
 export default function PlanPage() {
-  const { graph, brand, setDelivery, setMechanic, setCloseStyle, canEditSession } = useSession();
-  const people = withBrandPeople(brand);
+  const { graph, brand, viewer, setDelivery, setMechanic, setCloseStyle, canEditSession } = useSession();
   const [copied, setCopied] = useState<"facilitated" | "self-service" | "pdm" | null>(null);
+  if (viewer.actor === "cpm") {
+    return customerHasAccount(viewer.actor, graph)
+      ? <CustomerBriefing graph={graph} brand={brand} />
+      : <CustomerAccountPending message="Add the company before the session" />;
+  }
+
+  const people = withBrandPeople(brand);
   const pattern = patterns.find((item) => item.id === graph.session.patternId)!;
   const agenda = agendaForSession(graph);
   const sessionPrework = preworkForMechanic(graph.session.mechanic);
@@ -244,6 +251,71 @@ ${people.signoff}`;
           <div className="mt-4">
             <UnavailableControl label="Push to CRM" owner={brand.partnerName} explanation="Would write attendance and next-step status back to the partner CRM." />
           </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function CustomerBriefing({ graph, brand }: { graph: SessionGraph; brand: Brand }) {
+  const agenda = agendaForSession(graph);
+  const sessionPrework = preworkForMechanic(graph.session.mechanic);
+
+  return (
+    <div className="mx-auto max-w-5xl px-5 py-10 lg:px-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Before the session</h1>
+          <p className="mt-2 text-sm text-black/55">What you will cover, who to bring, and what to have ready.</p>
+        </div>
+        <Link href="/run" className={buttonVariants({ className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>Start the session <ArrowRight /></Link>
+      </div>
+
+      <div className="mt-8 space-y-5">
+        <section className="rounded-sm border border-black/10 bg-white p-6">
+          <h2 className="text-lg font-semibold">What you chose</h2>
+          <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs font-medium text-black/45">Format</dt>
+              <dd className="mt-1 font-semibold">{customerFormatLabels[graph.session.mechanic]}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-black/45">Partner of record</dt>
+              <dd className="mt-1 font-semibold">{brand.partnerName}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="rounded-sm border border-black/10 bg-white p-6">
+          <h2 className="text-lg font-semibold">What you will cover</h2>
+          <div className="mt-5 divide-y divide-black/10 border-y border-black/10">
+            {agenda.map((step) => (
+              <div key={step.id} className="grid gap-2 py-4 md:grid-cols-[36px_180px_90px_1fr] md:items-start">
+                <span className="grid size-6 place-items-center rounded-full text-xs font-semibold text-white" style={{ background: brand.accent }}>{step.order}</span>
+                <span className="font-semibold">{step.title}</span>
+                <span className="flex items-center gap-1 text-sm text-black/48"><Clock className="size-3.5" />{step.durationMinutes} min</span>
+                <span className="text-sm leading-6 text-black/62">“{step.prompt}”</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-sm border border-black/10 bg-white p-6">
+          <h2 className="text-lg font-semibold">Who to bring</h2>
+          <div className="mt-5 grid gap-px overflow-hidden rounded-sm border border-black/10 bg-black/10 md:grid-cols-2">
+            {graph.attendees.map((person) => (
+              <div key={person.id} className="bg-white p-4">
+                <p className="font-semibold">{person.name}</p>
+                <p className="text-xs text-black/45">{person.role}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-sm border border-black/10 bg-white p-6">
+          <h2 className="text-lg font-semibold">What to prepare</h2>
+          <p className="mt-2 text-sm text-black/55">Your team should have this ready before the session.</p>
+          <ul className="mt-4 space-y-3">{sessionPrework.map((item) => <li key={item} className="flex gap-3 text-sm leading-6"><Check className="mt-1 size-4 shrink-0" style={{ color: brand.accent }} />{item}</li>)}</ul>
         </section>
       </div>
     </div>

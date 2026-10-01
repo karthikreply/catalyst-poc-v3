@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BadgeDollarSign,
   Boxes,
+  CalendarDays,
   ChartNoAxesCombined,
   ChevronDown,
   CircleHelp,
@@ -13,12 +14,13 @@ import {
 } from "lucide-react";
 
 import { type Actor } from "@/lib/seed";
-import { breadcrumbForPath, isBrandFlowPath, vendorNavItems } from "@/lib/vendor-shell";
+import { breadcrumbForPath, isBrandFlowPath, navItemsForActor, type VendorNavItem } from "@/lib/vendor-shell";
 import { BrandFlowFrame } from "./brand-flow-frame";
 import { useSession } from "./session-provider";
 
-const navIcons = {
+const navIcons: Record<VendorNavItem["label"], typeof LayoutDashboard> = {
   Dashboard: LayoutDashboard,
+  "My sessions": CalendarDays,
   Programs: Boxes,
   "Value sessions": Presentation,
   Funding: BadgeDollarSign,
@@ -28,9 +30,17 @@ const navIcons = {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { viewer, setActor } = useSession();
-  const breadcrumbs = breadcrumbForPath(pathname);
+  const breadcrumbs = breadcrumbForPath(pathname, viewer.actor);
   const brandFlow = isBrandFlowPath(pathname, viewer.actor);
+  const navItems = navItemsForActor(viewer.actor);
+
+  function onViewerChange(next: Actor) {
+    setActor(next);
+    // This dropdown is the only control that navigates when the viewer changes.
+    router.push(next === "cpm" ? "/customer" : "/sessions");
+  }
 
   return (
     <div className="md-shell">
@@ -48,12 +58,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <select
             id="viewer-switch"
             value={viewer.actor}
-            onChange={(event) => setActor(event.target.value as Actor)}
+            onChange={(event) => onViewerChange(event.target.value as Actor)}
             className="md-label-large h-10 w-full appearance-none rounded-[var(--md-sys-shape-small)] border border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface)] pl-3 pr-9 text-[var(--md-sys-color-on-surface)]"
           >
             <option value="pdm">Priya Raghavan · PDM</option>
             <option value="partner">Ravi Menon · partner</option>
-            <option value="cpm">Marcus Hale · CPM</option>
+            <option value="cpm">Marcus Hale · customer</option>
           </select>
           <ChevronDown className="pointer-events-none absolute right-3 top-3 size-4 text-[var(--md-sys-color-on-surface-variant)]" />
         </div>
@@ -63,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <aside className="md-nav-rail hidden p-3 md:block">
           <nav aria-label="Partner network">
             <ul className="space-y-1">
-              {vendorNavItems.map((item) => {
+              {navItems.map((item) => {
                 const Icon = navIcons[item.label];
                 const active = item.href === "/" ? pathname === "/" : item.href ? pathname.startsWith(item.href) : false;
                 return (

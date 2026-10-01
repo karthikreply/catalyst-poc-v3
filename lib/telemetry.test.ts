@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
+import { initialSessionGraph } from "./seed";
+import { bookHackathon, rankedSolutions, setPilotPick, toggleSelected } from "./session";
 import {
   buildTelemetrySessions,
   canViewOpportunityDetail,
+  liveSessionOutcome,
   mechanicConversion,
   recentTelemetryRows,
   scopeTelemetry,
   summarizeTelemetry,
   telemetryBenchmarks,
+  type TelemetrySession,
 } from "./telemetry";
 
 describe("telemetryBenchmarks", () => {
@@ -92,6 +96,40 @@ describe("telemetryBenchmarks", () => {
       total: valueSprintRows.length,
       rate: Math.round((funded / valueSprintRows.length) * 100),
     });
+  });
+
+  it("signs a pilot on every third booked row and keeps it inside the booked count", () => {
+    const rows = buildTelemetrySessions();
+    const signed = rows.filter((row) => row.outcome === "Pilot signed");
+    const booked = rows.filter((row) => row.outcome === "Hackathon booked");
+    expect(signed.length).toBeGreaterThan(0);
+    expect(signed.every((row) => row.converted)).toBe(true);
+    expect(summarizeTelemetry(rows).hackathonsBooked).toBe(signed.length + booked.length);
+    expect(summarizeTelemetry(rows).hackathonsBooked).toBe(rows.filter((row) => row.converted).length);
+    expect(summarizeTelemetry(rows).pilotsSigned).toBe(signed.length);
+  });
+
+  it("counts a signed pilot as proposed and booked, and a plain booking only as booked", () => {
+    const base = buildTelemetrySessions()[0];
+    const signed: TelemetrySession = { ...base, id: "signed", outcome: "Pilot signed" };
+    const booked: TelemetrySession = { ...base, id: "booked", outcome: "Hackathon booked" };
+
+    expect(summarizeTelemetry([signed])).toMatchObject({ hackathonsProposed: 1, hackathonsBooked: 1, pilotsSigned: 1 });
+    expect(summarizeTelemetry([booked])).toMatchObject({ hackathonsProposed: 1, hackathonsBooked: 1, pilotsSigned: 0 });
+  });
+
+  it("reads the live session as signed only once a pilot is picked", () => {
+    const ids = rankedSolutions(initialSessionGraph).map((solution) => solution.id).slice(0, 3);
+    const booked = bookHackathon(ids.reduce((current, id) => toggleSelected(current, id), initialSessionGraph), {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Dana Reyes",
+      question: "Can we prove the three?",
+    });
+    expect(liveSessionOutcome(initialSessionGraph, true)).toBe("Hackathon proposed");
+    expect(liveSessionOutcome(booked, true)).toBe("Hackathon booked");
+    expect(liveSessionOutcome(setPilotPick(booked, booked.hackathon!.solutionIds[0]), true)).toBe("Pilot signed");
   });
 
   it("selects recent rows that demonstrate the cohort instead of repeated filler", () => {

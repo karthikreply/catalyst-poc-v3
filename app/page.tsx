@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, BadgeDollarSign, ChartNoAxesCombined, CircleHelp, Presentation, Shapes } from "lucide-react";
 
 import { useSession } from "@/components/session-provider";
 import type { Actor } from "@/lib/seed";
+import { customerSponsor, handoffLabel } from "@/lib/session";
 
 const entryDoors: { actor: Actor; title: string; tool: string; note?: string }[] = [
   {
@@ -20,13 +23,26 @@ const entryDoors: { actor: Actor; title: string; tool: string; note?: string }[]
   {
     actor: "cpm",
     title: "Customer",
-    tool: "Opens from a trial or campaign journey.",
-    note: "Direct apply is uncommon in this motion.",
+    tool: "Opens from a campaign or trial. Look up your account, or add it.",
   },
 ];
 
 export default function Home() {
-  const { viewer, setActor } = useSession();
+  const { graph, viewer, setActor, setCustomerDoor, hydrated } = useSession();
+  const router = useRouter();
+  const customerViewer = viewer.actor === "cpm";
+  // Commercially the handoff window is 48 hours after the room. That is a definition, not a filter:
+  // the strip shows whatever was recorded, whenever it was recorded.
+  const handoff = graph.session.handoff;
+  const sponsor = handoff?.sponsor || graph.outcome.owner || customerSponsor(graph)?.name || "Not named";
+  const handoffAt = handoff ? new Date(handoff.at).toLocaleString() : "—";
+
+  useEffect(() => {
+    if (hydrated && customerViewer) router.replace("/customer");
+  }, [hydrated, customerViewer, router]);
+
+  // The program dashboard is for the partner and the PDM. Nothing from it mounts for the customer.
+  if (!hydrated || customerViewer) return null;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-8 md:py-12">
@@ -52,7 +68,15 @@ export default function Home() {
             <button
               key={door.actor}
               type="button"
-              onClick={() => setActor(door.actor)}
+              onClick={() => {
+                if (door.actor === "cpm") {
+                  setActor("cpm");
+                  setCustomerDoor(true);
+                  router.push("/customer");
+                  return;
+                }
+                setActor(door.actor);
+              }}
               className={`md-card-outlined p-5 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--md-sys-color-primary)_5%,var(--md-sys-color-surface))] ${viewer.actor === door.actor ? "ring-2 ring-[var(--md-sys-color-primary)]" : ""}`}
             >
               <p className="md-title-medium">{door.title}</p>
@@ -64,6 +88,24 @@ export default function Home() {
         <div className="mt-6">
           <Link href="/scope" className="md-button-filled">Open value sessions <ArrowRight className="size-4" /></Link>
         </div>
+      </section>
+
+      <section className="md-card-outlined mt-6 p-5" aria-labelledby="handoff-strip-title">
+        <h2 id="handoff-strip-title" className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">Handoff · {graph.session.customerName}</h2>
+        <dl className="mt-3 grid gap-4 sm:grid-cols-3">
+          <div>
+            <dt className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">Sponsor</dt>
+            <dd className="md-title-medium mt-1">{sponsor}</dd>
+          </div>
+          <div>
+            <dt className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">Handoff</dt>
+            <dd className="md-title-medium mt-1">{handoffLabel(handoff)}</dd>
+          </div>
+          <div>
+            <dt className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">Time</dt>
+            <dd className="md-title-medium mt-1">{handoffAt}</dd>
+          </div>
+        </dl>
       </section>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

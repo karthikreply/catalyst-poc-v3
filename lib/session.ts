@@ -1,18 +1,25 @@
 import type { Brand } from "./brands";
 import { ledgerAnnualTotal } from "./cost-model";
 import {
+  businessCaseSolutionIds,
   heartlandSolutions,
   initialSessionGraph,
+  ledgerSolutionIds,
   type HackathonBooking,
   patterns,
   prework,
   type Actor,
+  type AgendaStep,
+  type Capture,
   type CloseStyle,
   type ColdAttendee,
   type ColdCompany,
   type Delivery,
+  type Handoff,
+  type HandoffKind,
   type Mechanic,
   type PartnerNote,
+  type Session,
   type SessionGraph,
   type SolutionCandidate,
 } from "./seed";
@@ -53,6 +60,7 @@ export function withSolutionProducts(solutions: SolutionCandidate[]): SolutionCa
       outcome: solution.outcome || seeded?.outcome || "",
       valueAnchor: solution.valueAnchor || seeded?.valueAnchor || "",
       products,
+      stepId: solution.stepId ?? seeded?.stepId,
     };
   });
 }
@@ -65,6 +73,35 @@ export const coldScopeDefaults: { company: ColdCompany; attendees: ColdAttendee[
     { name: "Devin Cole", role: "Senior Developer" },
   ],
 };
+
+/** Named demonstration account. Keeps a searched company name when one was typed. */
+export function demonstrationColdAccount(companyName?: string) {
+  const name = companyName?.trim() || coldScopeDefaults.company.name;
+  return {
+    company: { ...coldScopeDefaults.company, name },
+    attendees: coldScopeDefaults.attendees.map((person) => ({ ...person })),
+  };
+}
+
+/** Fill blank company or room fields from the demonstration account. Returns null when already complete. */
+export function withDemonstrationColdAccount(
+  company: ColdCompany | null,
+  attendees: ColdAttendee[],
+) {
+  const current = company ?? { name: "", industry: "", sizeBand: "" };
+  const peopleBlank = attendees.length === 0 || attendees.every((person) => !person.name.trim());
+  const companyThin = !current.name.trim() || !current.industry.trim() || !current.sizeBand.trim();
+  if (!peopleBlank && !companyThin) return null;
+  const demo = demonstrationColdAccount(current.name);
+  return {
+    company: {
+      name: current.name.trim() || demo.company.name,
+      industry: current.industry.trim() || demo.company.industry,
+      sizeBand: current.sizeBand.trim() || demo.company.sizeBand,
+    },
+    attendees: peopleBlank ? demo.attendees : attendees.map((person) => ({ ...person })),
+  };
+}
 
 export function restoreSeededGraph(saved: SessionGraph | null) {
   const hydrated = hydrateSessionGraph(saved);
@@ -106,6 +143,19 @@ function latestPartnerNote(notes: PartnerNote[]) {
   }, null);
 }
 
+const handoffKinds: HandoffKind[] = ["daf", "pilot", "pdm-notified"];
+
+function hydrateHandoff(value: unknown): Handoff | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<Handoff>;
+  if (!handoffKinds.includes(candidate.kind as HandoffKind)) return null;
+  return {
+    kind: candidate.kind as HandoffKind,
+    at: typeof candidate.at === "string" ? candidate.at : "",
+    sponsor: typeof candidate.sponsor === "string" ? candidate.sponsor : "",
+  };
+}
+
 export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
   if (!value?.session) return initialSessionGraph;
   const cold = value.session.scopeMode === "cold";
@@ -119,6 +169,7 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
         state: index === 0 ? "active" as const : "upcoming" as const,
       }))
     : value.agenda ?? initialSessionGraph.agenda;
+  const pilotPick = typeof value.outcome?.pilotPick === "string" ? value.outcome.pilotPick : null;
   const outcome = legacyCold
     ? {
         ...initialSessionGraph.outcome,
@@ -129,8 +180,9 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
         nextStep: "",
         constraint: "",
         partiallyEstimated: true,
+        pilotPick: null,
       }
-    : { ...initialSessionGraph.outcome, ...value.outcome, sessionId };
+    : { ...initialSessionGraph.outcome, ...value.outcome, sessionId, pilotPick };
   return {
     ...initialSessionGraph,
     ...value,
@@ -139,6 +191,9 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
       ...value.session,
       id: sessionId,
       reusePriorPilotSpec: value.session.reusePriorPilotSpec ?? (cold ? null : true),
+      ...(value.session.customerFormatChosen ? { customerFormatChosen: true } : {}),
+      customerDoor: value.session.customerDoor === true,
+      handoff: hydrateHandoff(value.session.handoff),
     },
     valueInputs: legacyCold
       ? emptyValueInputs(sessionId)
@@ -165,9 +220,22 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
       value.solutions?.length ? value.solutions : initialSessionGraph.solutions,
     ),
     ranking: value.ranking?.order?.length
-      ? { order: value.ranking.order, locked: Boolean(value.ranking.locked) }
+      ? {
+          order: value.ranking.order,
+          selected: Array.isArray(value.ranking.selected) ? value.ranking.selected : [],
+          locked: Boolean(value.ranking.locked),
+        }
       : initialSessionGraph.ranking,
-    hackathon: value.hackathon ?? null,
+    hackathon: value.hackathon
+      ? {
+          ...value.hackathon,
+          solutionIds: Array.isArray(value.hackathon.solutionIds) ? value.hackathon.solutionIds : [],
+          showcaseAt: value.hackathon.showcaseAt?.trim() || defaultShowcaseAt(value.hackathon.date ?? ""),
+          calendarAdded: Boolean(value.hackathon.calendarAdded),
+          meetAdded: Boolean(value.hackathon.meetAdded),
+        }
+      : null,
+    votes: value.votes && typeof value.votes === "object" ? value.votes : {},
   };
 }
 
@@ -226,23 +294,25 @@ export function applyColdScope(
       nextStep: enteringCold ? "" : graph.outcome.nextStep,
       constraint: enteringCold ? "" : graph.outcome.constraint,
       partiallyEstimated: true,
+      pilotPick: enteringCold ? null : graph.outcome.pilotPick,
     },
     attendees: attendees.filter((person) => person.name.trim() && person.role.trim()).map((person, index) => {
       const match = matchedColdRole(person.role);
       return {
-        id: `cold-attendee-${index + 1}`,
+        id: person.id?.trim() || `cold-attendee-${index + 1}`,
         name: person.name,
         role: person.role,
         reason: match?.reason ?? "Participant named during cold scope.",
-        source: "typed",
-        attendance: "attending",
+        source: "inferred" as const,
+        attendance: "attending" as const,
       };
     }),
     solutions,
     ranking: enteringCold
-      ? { order: solutions.map((s) => s.id), locked: false }
+      ? { order: solutions.map((s) => s.id), selected: [], locked: false }
       : graph.ranking,
     hackathon: enteringCold ? null : graph.hackathon,
+    votes: enteringCold ? {} : graph.votes,
   };
 }
 
@@ -378,10 +448,100 @@ export function updateValueConfirmer(
 }
 
 export function applyMechanic(graph: SessionGraph, mechanic: Mechanic): SessionGraph {
-  return bindAnnualValue({
+  // Once the hackathon is booked the mechanic is settled.
+  if (graph.hackathon?.booked) return graph;
+  // A partner-led session only moves to the ledger once the value inputs exist.
+  // The customer door flips to self-service first, so it can still choose the ledger and enter the numbers there.
+  if (mechanic === "ghost-ledger" && graph.session.delivery !== "self-service" && !hasCompleteValueInputs(graph)) {
+    return graph;
+  }
+  const next = bindAnnualValue({
     ...graph,
     session: { ...graph.session, mechanic, ledgerFrozen: false },
   });
+  const allowed = new Set(solutionIdsForMechanic(mechanic));
+  return {
+    ...next,
+    ranking: {
+      ...next.ranking,
+      selected: next.ranking.selected.filter((id) => allowed.has(id)),
+    },
+  };
+}
+
+/** Customer door: choosing a format starts the customer's own session on the one graph. */
+export function chooseCustomerFormat(graph: SessionGraph, mechanic: Mechanic): SessionGraph {
+  if (graph.hackathon?.booked) return graph;
+  const next = applyMechanic(applyDeliveryMode(graph, "self-service"), mechanic);
+  const firstChoice = !graph.session.customerFormatChosen;
+  return {
+    ...next,
+    session: { ...next.session, customerFormatChosen: true },
+    // The seeded agenda state belongs to Heartland's session; the customer starts from Scope.
+    agenda: firstChoice
+      ? next.agenda.map((step) => ({ ...step, state: "upcoming" as const }))
+      : next.agenda,
+  };
+}
+
+export const customerFormatLabels: Record<Mechanic, string> = {
+  "value-sprint": "Prioritize my use cases",
+  "ghost-ledger": "Show me the cost of waiting",
+};
+
+export function fundingRouteLabel(route: Session["fundingRoute"]) {
+  if (route === "invite-karen") return "Karen is in the room";
+  if (route === "brief-dana") return "Dana carries the ask";
+  return "Not started";
+}
+
+export type CustomerHomeSummary = {
+  started: boolean;
+  company: string;
+  format: string | null;
+  stage: string;
+  partner: string;
+  annualValue: number | null;
+  funding: string;
+  continueHref: "/scope" | "/run" | null;
+};
+
+/** The customer has named a company in cold scope. A seeded graph is not their account. */
+export function customerHasAccount(actor: Actor, graph: SessionGraph) {
+  return actor === "cpm" && graph.session.scopeMode === "cold" && graph.session.customerName.trim().length > 0;
+}
+
+/** This engagement only. Never treats the seeded Heartland graph as the customer's session. */
+export function customerHomeSummary(graph: SessionGraph, partnerName: string): CustomerHomeSummary {
+  const started = Boolean(graph.session.customerFormatChosen);
+  const lookedUp = graph.session.scopeMode === "cold";
+  const company = lookedUp ? graph.session.customerName : "No account yet";
+  const activeStep = started ? agendaForSession(graph).find((step) => step.state === "active") ?? null : null;
+  const annualValue = started && lookedUp && hasCompleteValueInputs(graph) ? graph.outcome.annualValue : null;
+  return {
+    started,
+    company,
+    format: started ? customerFormatLabels[graph.session.mechanic] : null,
+    stage: !started ? "Not started" : pilotPickTitle(graph) ? "Pilot scoped" : activeStep ? activeStep.title : "Scope",
+    partner: partnerName,
+    annualValue,
+    funding: fundingRouteLabel(graph.session.fundingRoute),
+    continueHref: !started ? null : activeStep ? "/run" : "/scope",
+  };
+}
+
+/** Latest capture on the active step, else on the most recent done step. Null when none. */
+export function latestStepCapture(graph: SessionGraph): Capture | null {
+  const active = graph.agenda.find((step) => step.state === "active");
+  const done = [...graph.agenda].filter((step) => step.state === "done").sort((a, b) => b.order - a.order);
+  const candidates = [active, ...done].filter((step): step is AgendaStep => Boolean(step));
+  for (const step of candidates) {
+    const captures = graph.captures
+      .filter((capture) => capture.stepId === step.id)
+      .sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt));
+    if (captures[0]) return captures[0];
+  }
+  return null;
 }
 
 export function applyCloseStyle(graph: SessionGraph, closeStyle: CloseStyle): SessionGraph {
@@ -462,12 +622,24 @@ export function viewerForActor(actor: Actor, brand: Brand): Viewer {
   return { actor, name: "Ravi Menon", org: brand.partnerName };
 }
 
-export function isSessionReadOnly(actor: Actor) {
-  return actor === "cpm";
+export function isSessionReadOnly(actor: Actor, graph: SessionGraph) {
+  if (actor !== "cpm") return false;
+  // Customer can run a self-service or cold session. A facilitated Heartland record stays the partner's evidence.
+  return graph.session.delivery !== "self-service" && graph.session.scopeMode !== "cold";
+}
+
+/** Partner-led session the customer is sitting in. The Customer card opens the door instead. */
+export function isCustomerAttending(actor: Actor, graph: SessionGraph) {
+  return isSessionReadOnly(actor, graph) && graph.session.customerDoor !== true;
 }
 
 export function canViewPartnerScope(actor: Actor) {
-  return actor === "partner";
+  return actor === "partner" || actor === "pdm";
+}
+
+/** The partner or the customer books the three days. The PDM reviews the shortlist. */
+export function canBookHackathon(actor: Actor) {
+  return actor === "partner" || actor === "cpm";
 }
 
 export function bindAnnualValue(graph: SessionGraph): SessionGraph {
@@ -637,6 +809,9 @@ export function artifactActions(actor: Actor, qualified: boolean, delivery: Deli
       tertiary: "Contact my partner manager with this business case",
     };
   }
+  if (actor === "cpm") {
+    return { primary: null, secondary: null, tertiary: null };
+  }
   return {
     primary: "Review funding request",
     secondary: null,
@@ -692,35 +867,319 @@ export function applyFundingRoute(graph: SessionGraph, route: FundingRoute): Ses
 }
 
 export function fundingAskCopy(graph: SessionGraph) {
-  const winner = winningSolution(graph);
-  const winnerLabel = winner ? ` on ${winner.title}` : "";
+  const bookedTitles = bookedSolutionTitles(graph);
+  const bookedLabel = bookedTitles.length
+    ? ` on ${bookedTitles.join(", ")}`
+    : "";
   if (graph.session.scopeMode === "cold") {
     const economicBuyer = graph.attendees.find((attendee) => /cfo|finance|economic buyer|executive sponsor/i.test(attendee.role));
     const technicalOwner = graph.attendees.find((attendee) => /developer|engineer|technical lead/i.test(attendee.role));
     if (!economicBuyer) {
       return "Confirm an economic buyer before requesting funding that substantiates the hackathon booking.";
     }
-    return `${economicBuyer.name}: substantiate the three-day hackathon${winnerLabel}${technicalOwner ? ` and confirm ${technicalOwner.name} will be in the room` : ""}.`;
+    return `${economicBuyer.name}: substantiate the three-day hackathon${bookedLabel}${technicalOwner ? ` and confirm ${technicalOwner.name} will be in the room` : ""}.`;
   }
   if (graph.session.fundingRoute === "brief-dana") {
-    return `Dana Reyes: carry the funding ask. Brief Karen so she can substantiate the three-day hackathon${winnerLabel} and confirm Alex Chen joins the room.`;
+    return `Dana Reyes: carry the funding ask. Brief Karen so she can substantiate the three-day hackathon${bookedLabel} and confirm Alex Chen joins the room.`;
   }
-  return `Karen Whitfield, CFO: substantiate the three-day hackathon${winnerLabel} and confirm Alex Chen joins the room.`;
+  return `Karen Whitfield, CFO: substantiate the three-day hackathon${bookedLabel} and confirm Alex Chen joins the room.`;
+}
+
+export function solutionIdsForMechanic(mechanic: Mechanic): string[] {
+  return mechanic === "ghost-ledger"
+    ? [...ledgerSolutionIds]
+    : [...businessCaseSolutionIds];
+}
+
+export function catalogSolutionById(id: string, graph?: SessionGraph): SolutionCandidate | undefined {
+  const fromGraph = graph
+    ? withSolutionProducts(graph.solutions).find((solution) => solution.id === id)
+    : undefined;
+  if (fromGraph) return fromGraph;
+  return withSolutionProducts(heartlandSolutions).find((solution) => solution.id === id);
+}
+
+export function bookedSolutionTitles(graph: SessionGraph): string[] {
+  const ids = graph.hackathon?.solutionIds ?? [];
+  return ids
+    .map((id) => catalogSolutionById(id, graph)?.title)
+    .filter((title): title is string => Boolean(title));
+}
+
+/** Cloud products named on the three booked solutions, de-duplicated in catalog order. */
+export function bookedSolutionProducts(graph: SessionGraph): string[] {
+  const seen = new Set<string>();
+  const products: string[] = [];
+  for (const id of graph.hackathon?.solutionIds ?? []) {
+    for (const product of catalogSolutionById(id, graph)?.products ?? []) {
+      if (seen.has(product)) continue;
+      seen.add(product);
+      products.push(product);
+    }
+  }
+  return products;
+}
+
+export type GoogleStackItem = {
+  product: string;
+  role: string;
+};
+
+/** Narrative Google stack for a booked hackathon: solution products plus Calendar and Meet. */
+export function hackathonGoogleStack(graph: SessionGraph): GoogleStackItem[] {
+  if (!graph.hackathon?.booked) return [];
+  const roles: Record<string, string> = {
+    Gemini: "Solution approaches for the three booked rows",
+    "Document AI": "Form and PDF extraction on the customer's documents",
+    "Vertex AI": "Model and evaluation work during the three days",
+    "Vertex AI Search": "Grounded retrieval over claims knowledge",
+    "Cloud Logging": "Audit trail for automated decisions",
+  };
+  const items: GoogleStackItem[] = bookedSolutionProducts(graph).map((product) => ({
+    product,
+    role: roles[product] ?? "Google Cloud capability used in the three-day build",
+  }));
+  items.push({
+    product: "Google Calendar",
+    role: "Hold the three-day window for the room",
+  });
+  items.push({
+    product: "Google Meet",
+    role: "Facilitated room with the Google facilitator",
+  });
+  return items;
+}
+
+function shiftIsoDate(isoDate: string, dayOffset: number): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + dayOffset));
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatCalendarDay(isoDate: string, dayOffset = 0): string {
+  return shiftIsoDate(isoDate, dayOffset).replaceAll("-", "");
+}
+
+/** Solution showcase default: 14:00 on the third day of the hackathon. Empty when no date. */
+export function defaultShowcaseAt(hackathonDate: string): string {
+  const date = hackathonDate.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return "";
+  return `${shiftIsoDate(date, 2)}T14:00`;
+}
+
+/** "2026-10-16T14:00" → "2026-10-16 · 14:00" for the dashboard. */
+export function showcaseLabel(showcaseAt: string): string {
+  const [date, time] = showcaseAt.split("T");
+  return time ? `${date} · ${time}` : showcaseAt;
+}
+
+export type BookedSolutionPain = { id: string; title: string; pain: string };
+
+/**
+ * The three booked titles with the pain line each answers: the latest capture on the
+ * session step that named the solution, else the solution's outcome line.
+ */
+export function bookedSolutionPains(graph: SessionGraph): BookedSolutionPain[] {
+  return (graph.hackathon?.solutionIds ?? []).flatMap((id) => {
+    const solution = catalogSolutionById(id, graph);
+    if (!solution) return [];
+    const latest = graph.captures
+      .filter((capture) => capture.stepId === solution.stepId)
+      .sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt))[0];
+    return [{ id, title: solution.title, pain: latest?.text ?? solution.outcome }];
+  });
+}
+
+/** Title of the solution named as the six-week pilot at the showcase. Null until picked. */
+export function pilotPickTitle(graph: SessionGraph): string | null {
+  const pick = graph.outcome.pilotPick;
+  if (!pick || !graph.hackathon?.booked || !graph.hackathon.solutionIds.includes(pick)) return null;
+  return catalogSolutionById(pick, graph)?.title ?? null;
+}
+
+/** Partner or customer names one of the three as the pilot. Choosing again replaces it. */
+export function setPilotPick(graph: SessionGraph, solutionId: string): SessionGraph {
+  if (!graph.hackathon?.booked || !graph.hackathon.solutionIds.includes(solutionId)) return graph;
+  if (graph.outcome.pilotPick === solutionId) return graph;
+  return { ...graph, outcome: { ...graph.outcome, pilotPick: solutionId } };
+}
+
+/** Partner records what happened after the room, once. A second call returns the same graph. */
+export function recordHandoff(graph: SessionGraph, kind: HandoffKind): SessionGraph {
+  if (graph.session.handoff) return graph;
+  const sponsor = graph.outcome.owner ?? customerSponsor(graph)?.name ?? "";
+  return {
+    ...graph,
+    session: {
+      ...graph.session,
+      handoff: { kind, at: new Date().toISOString(), sponsor },
+    },
+  };
+}
+
+export function handoffLabel(handoff: Handoff | null) {
+  if (!handoff) return "Not yet handed off";
+  if (handoff.kind === "daf") return "DAF with the partner";
+  if (handoff.kind === "pilot") return "Pilot filed";
+  return "PDM notified";
+}
+
+/** Business-case next step: the picked pilot once named, otherwise the session's own line. */
+export function pilotNextStepCopy(graph: SessionGraph): string {
+  const title = pilotPickTitle(graph);
+  return title ? `Six-week pilot on ${title}` : graph.outcome.nextStep;
+}
+
+/** Pilot-spec scope line once the room has picked. Null until then. */
+export function pilotScopeLine(graph: SessionGraph): string | null {
+  const title = pilotPickTitle(graph);
+  return title ? `Six-week pilot on ${title}, scoped in the three-day hackathon.` : null;
+}
+
+/** Google Calendar template URL (no OAuth). Empty when the hackathon is not booked. */
+export function googleCalendarComposeUrl(graph: SessionGraph, partnerName?: string): string {
+  const booking = graph.hackathon;
+  if (!booking?.booked || !booking.date.trim()) return "";
+  const titles = bookedSolutionTitles(graph);
+  const text = `${graph.session.customerName} · 3-day hackathon`;
+  const details = [
+    booking.question,
+    "",
+    titles.length ? `Solutions: ${titles.join("; ")}` : "Three selected solutions",
+    ...(partnerName ? [`Partner: ${partnerName}`] : []),
+    `Google facilitator: ${booking.googleFacilitator}`,
+    `Partner specialist: ${booking.partnerSpecialist}`,
+    `Customer owner: ${booking.customerOwner}`,
+    ...(booking.showcaseAt ? [`Showcase: ${booking.showcaseAt}`] : []),
+    "",
+    "Join with Google Meet — scheduled by the facilitator.",
+    "These three days run on Google Cloud and Workspace.",
+  ].join("\n");
+  const start = formatCalendarDay(booking.date);
+  const end = formatCalendarDay(booking.date, 3);
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text,
+    details,
+    dates: `${start}/${end}`,
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+/** Instant Google Meet room (no OAuth). Empty when the hackathon is not booked. */
+export function googleMeetUrl(graph: SessionGraph): string {
+  if (!graph.hackathon?.booked) return "";
+  return "https://meet.google.com/new";
 }
 
 export function rankedSolutions(graph: SessionGraph) {
+  const allowed = new Set(solutionIdsForMechanic(graph.session.mechanic));
   const byId = new Map(withSolutionProducts(graph.solutions).map((solution) => [solution.id, solution]));
   return graph.ranking.order
+    .filter((id) => allowed.has(id))
     .map((id) => byId.get(id))
     .filter((solution): solution is NonNullable<typeof solution> => Boolean(solution));
 }
 
-export function winningSolution(graph: SessionGraph) {
-  if (!graph.ranking.locked || graph.ranking.order.length === 0) return null;
-  const winner = withSolutionProducts(graph.solutions).find(
-    (solution) => solution.id === graph.ranking.order[0],
-  );
-  return winner ?? null;
+/** Selected solutions in current ranking.order. Empty when nothing selected. */
+export function selectedSolutions(graph: SessionGraph) {
+  const selected = new Set(graph.ranking.selected);
+  const byId = new Map(withSolutionProducts(graph.solutions).map((solution) => [solution.id, solution]));
+  return graph.ranking.order
+    .filter((id) => selected.has(id))
+    .map((id) => byId.get(id))
+    .filter((solution): solution is NonNullable<typeof solution> => Boolean(solution));
+}
+
+export function toggleSelected(graph: SessionGraph, solutionId: string): SessionGraph {
+  if (graph.ranking.locked || graph.hackathon?.booked) return graph;
+  if (!graph.ranking.order.includes(solutionId)) return graph;
+  const selected = graph.ranking.selected;
+  if (selected.includes(solutionId)) {
+    return {
+      ...graph,
+      ranking: {
+        ...graph.ranking,
+        selected: selected.filter((id) => id !== solutionId),
+      },
+    };
+  }
+  if (selected.length >= 3) return graph;
+  return {
+    ...graph,
+    ranking: {
+      ...graph.ranking,
+      selected: [...selected, solutionId],
+    },
+  };
+}
+
+export function castVote(graph: SessionGraph, attendeeId: string, solutionId: string): SessionGraph {
+  if (!attendeeId.trim() || !solutionId.trim()) return graph;
+  return {
+    ...graph,
+    votes: {
+      ...graph.votes,
+      [attendeeId]: solutionId,
+    },
+  };
+}
+
+export function voteTallies(graph: SessionGraph): Record<string, number> {
+  const tallies: Record<string, number> = {};
+  for (const solutionId of Object.values(graph.votes)) {
+    tallies[solutionId] = (tallies[solutionId] ?? 0) + 1;
+  }
+  return tallies;
+}
+
+export type AccountLookupResult =
+  | { hit: true; accountName: "Heartland Mutual Insurance" }
+  | { hit: false; query: string; customerDoor: boolean };
+
+export function lookupAccount(query: string, actor: Actor): AccountLookupResult {
+  const trimmed = query.trim();
+  const normalized = trimmed.toLowerCase();
+  if (actor === "cpm") {
+    return { hit: false, query: trimmed, customerDoor: true };
+  }
+  if (normalized === "heartland" || normalized === "heartland mutual insurance") {
+    return { hit: true, accountName: "Heartland Mutual Insurance" };
+  }
+  return { hit: false, query: trimmed, customerDoor: false };
+}
+
+export const heartlandKnownPeople: Record<string, { role: string }> = {
+  "dana reyes": { role: "VP Claims Operations" },
+  "michelle dorsey": { role: "Claims Supervisor" },
+  "alex chen": { role: "Senior Developer" },
+  "robert osei": { role: "Compliance Officer" },
+  "sandeep nair": { role: "Director of Infrastructure" },
+};
+
+export type AttendeeEnrichment =
+  | { kind: "known"; name: string; role: string; prompt: string }
+  | { kind: "unknown"; name: string; prompt: string };
+
+export function enrichAttendeeName(name: string, accountHit: boolean): AttendeeEnrichment {
+  const trimmed = name.trim();
+  const known = accountHit ? heartlandKnownPeople[trimmed.toLowerCase()] : undefined;
+  if (known) {
+    return {
+      kind: "known",
+      name: trimmed,
+      role: known.role,
+      prompt: "Is that the role in this session?",
+    };
+  }
+  return {
+    kind: "unknown",
+    name: trimmed,
+    prompt: `Couldn't find information on ${trimmed}. Tell me more about them.`,
+  };
 }
 
 export function reorderSolutions(graph: SessionGraph, order: string[]): SessionGraph {
@@ -731,6 +1190,7 @@ export function reorderSolutions(graph: SessionGraph, order: string[]): SessionG
 }
 
 export function moveSolution(graph: SessionGraph, solutionId: string, direction: "up" | "down"): SessionGraph {
+  if (graph.ranking.locked || graph.hackathon?.booked) return graph;
   const index = graph.ranking.order.indexOf(solutionId);
   if (index < 0) return graph;
   const swapWith = direction === "up" ? index - 1 : index + 1;
@@ -741,6 +1201,7 @@ export function moveSolution(graph: SessionGraph, solutionId: string, direction:
 }
 
 export function lockRanking(graph: SessionGraph): SessionGraph {
+  if (graph.ranking.selected.length !== 3) return graph;
   if (graph.ranking.order.length === 0) return graph;
   return {
     ...graph,
@@ -753,6 +1214,7 @@ export function lockRanking(graph: SessionGraph): SessionGraph {
 }
 
 export function unlockRanking(graph: SessionGraph): SessionGraph {
+  if (graph.hackathon?.booked) return graph;
   return {
     ...graph,
     ranking: { ...graph.ranking, locked: false },
@@ -773,49 +1235,83 @@ export function defaultHackathonDraft(graph: SessionGraph): HackathonBooking {
     graph.session.delivery === "google-facilitated"
       ? graph.session.facilitator?.name ?? "Priya Raghavan"
       : "Priya Raghavan";
-  const winner = winningSolution(graph);
+  const selected = selectedSolutions(graph);
+  const titles = selected.map((solution) => solution.title.toLowerCase());
   return {
     date: "",
     googleFacilitator,
     partnerSpecialist,
     customerOwner,
-    question: winner
-      ? `Can we prove ${winner.title.toLowerCase()} on Heartland's own forms in three days?`
-      : "Can we prove the winning solution on Heartland's own forms in three days?",
+    question: titles.length === 3
+      ? `Can we prove ${titles.join("; ")} on Heartland's own forms in three days?`
+      : "Can we prove the three selected solutions on Heartland's own forms in three days?",
+    showcaseAt: "",
     booked: false,
+    solutionIds: [],
+    calendarAdded: false,
+    meetAdded: false,
   };
 }
 
-export function bookHackathon(
-  graph: SessionGraph,
-  draft: Omit<HackathonBooking, "booked">,
-): SessionGraph {
-  if (!graph.ranking.locked) return graph;
+/** Booking form input. `showcaseAt` falls back to the afternoon of the third day. */
+export type HackathonDraft = Omit<HackathonBooking, "booked" | "solutionIds" | "calendarAdded" | "meetAdded">;
+
+export function bookHackathon(graph: SessionGraph, draft: HackathonDraft): SessionGraph {
+  if (graph.ranking.selected.length !== 3) return graph;
   const date = draft.date.trim();
   const googleFacilitator = draft.googleFacilitator.trim();
   const partnerSpecialist = draft.partnerSpecialist.trim();
   const customerOwner = draft.customerOwner.trim();
   const question = draft.question.trim();
   if (!date || !googleFacilitator || !partnerSpecialist || !customerOwner || !question) return graph;
+  const solutionIds = graph.ranking.order.filter((id) => graph.ranking.selected.includes(id));
+  if (solutionIds.length !== 3) return graph;
+  const showcaseAt = draft.showcaseAt?.trim() || defaultShowcaseAt(date);
   return {
     ...graph,
+    ranking: { ...graph.ranking, locked: true },
     hackathon: {
       date,
       googleFacilitator,
       partnerSpecialist,
       customerOwner,
       question,
+      showcaseAt,
       booked: true,
+      solutionIds,
+      calendarAdded: false,
+      meetAdded: false,
     },
     outcome: {
       ...graph.outcome,
       nextStep: `3-day hackathon on ${date} to scope a six-week pilot`,
       owner: customerOwner,
+      pilotPick: null,
     },
     session: {
       ...graph.session,
       status: "complete",
     },
+  };
+}
+
+/** Demo: treat Google Calendar compose as done after the user opens it. */
+export function markHackathonCalendarAdded(graph: SessionGraph): SessionGraph {
+  if (!graph.hackathon?.booked) return graph;
+  if (graph.hackathon.calendarAdded) return graph;
+  return {
+    ...graph,
+    hackathon: { ...graph.hackathon, calendarAdded: true },
+  };
+}
+
+/** Demo: treat the Google Meet room as booked after the user opens it. */
+export function markHackathonMeetAdded(graph: SessionGraph): SessionGraph {
+  if (!graph.hackathon?.booked) return graph;
+  if (graph.hackathon.meetAdded) return graph;
+  return {
+    ...graph,
+    hackathon: { ...graph.hackathon, meetAdded: true },
   };
 }
 

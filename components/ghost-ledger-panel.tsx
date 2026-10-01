@@ -14,7 +14,7 @@ export function GhostLedgerPanel() {
   const monthly = useMemo(() => ledgerMonthlyTotal(graph.costComponents), [graph.costComponents]);
   const rate = perSecondRate(annual);
   const complete = hasCompleteCostComponents(graph);
-  const frozen = graph.session.ledgerFrozen || viewer.actor === "cpm" || !canEditSession;
+  const frozen = graph.session.ledgerFrozen || !canEditSession;
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export function GhostLedgerPanel() {
       {graph.session.delivery === "self-service" && (
         <p className="mt-1 text-sm font-medium text-amber-800">Unverified estimate</p>
       )}
-      {viewer.actor === "cpm" && (
+      {viewer.actor === "cpm" && !canEditSession && (
         <p className="mt-3 text-sm text-black/58">Historical session record — the platform vendor sees completed evidence shared by the partner, not live session activity.</p>
       )}
       <div className="mt-6 divide-y divide-black/10 border-y border-black/10">

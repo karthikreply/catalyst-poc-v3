@@ -2,12 +2,29 @@ import type { Actor } from "./seed";
 
 export const vendorNavItems = [
   { label: "Dashboard", href: "/", illustrative: false },
+  { label: "My sessions", href: "/sessions", illustrative: false },
   { label: "Programs", href: null, illustrative: true },
   { label: "Value sessions", href: "/scope", illustrative: false },
   { label: "Funding", href: "/funding", illustrative: false },
   { label: "Telemetry", href: "/telemetry", illustrative: false },
   { label: "Support", href: null, illustrative: true },
 ] as const;
+
+export type VendorNavItem = {
+  label: (typeof vendorNavItems)[number]["label"];
+  href: "/" | "/customer" | "/sessions" | "/scope" | "/funding" | "/telemetry" | null;
+  illustrative: boolean;
+};
+
+/** Partner and PDM keep the program rail. The customer sees this engagement only. */
+export function navItemsForActor(actor: Actor): VendorNavItem[] {
+  if (actor !== "cpm") return vendorNavItems.map((item) => ({ ...item }));
+  return [
+    { label: "Dashboard", href: "/customer", illustrative: false },
+    { label: "Value sessions", href: "/scope", illustrative: false },
+    { label: "Funding", href: "/funding", illustrative: false },
+  ];
+}
 
 const flowLabels: Record<string, string> = {
   "/scope": "Scope",
@@ -27,12 +44,15 @@ export function mergesSessionHeader(pathname: string) {
   return pathname.startsWith("/run");
 }
 
-export function breadcrumbForPath(pathname: string) {
-  if (pathname === "/") return ["Partner network", "Dashboard"];
-  if (pathname.startsWith("/funding")) return ["Partner network", "Funding"];
-  if (pathname.startsWith("/telemetry")) return ["Partner network", "Telemetry"];
+export function breadcrumbForPath(pathname: string, actor: Actor) {
+  const root = actor === "cpm" ? "Your engagement" : "Partner network";
+  if (pathname === "/") return [root, "Dashboard"];
+  if (pathname.startsWith("/sessions")) return [root, "My sessions"];
+  if (pathname.startsWith("/funding")) return [root, "Funding"];
+  if (pathname.startsWith("/telemetry")) return [root, "Telemetry"];
+  if (pathname.startsWith("/customer")) return [root, "Customer"];
   const flowPath = Object.keys(flowLabels).find((path) => pathname.startsWith(path));
   return flowPath
-    ? ["Partner network", "Value sessions", flowLabels[flowPath]]
-    : ["Partner network"];
+    ? [root, "Value sessions", flowLabels[flowPath]]
+    : [root];
 }

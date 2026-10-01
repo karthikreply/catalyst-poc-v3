@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { initialSessionGraph } from "@/lib/seed";
-import { applyClaimsVolumeChoice, applyExactClaimsVolume, savePartnerNote } from "@/lib/session";
+import { applyClaimsVolumeChoice, applyExactClaimsVolume, chooseCustomerFormat, savePartnerNote } from "@/lib/session";
 
 const { useSessionMock } = vi.hoisted(() => ({
   useSessionMock: vi.fn(),
@@ -51,18 +51,35 @@ function useInteractiveSession() {
   };
 }
 
-function renderVendorScope(complete: boolean) {
+function renderCustomerScope(complete: boolean) {
+  const started = chooseCustomerFormat(initialSessionGraph, "value-sprint");
   useSessionMock.mockReturnValue({
     graph: {
-      ...initialSessionGraph,
+      ...started,
       session: {
-        ...initialSessionGraph.session,
+        ...started.session,
         claimsVolumeChoice: complete ? "about-400" : null,
         fundingRoute: complete ? "invite-karen" : null,
       },
     },
-    viewer: { actor: "cpm", name: "Casey", org: "Platform vendor" },
+    brand: { partnerName: "CDW" },
+    viewer: { actor: "cpm", name: "Casey", org: "Customer" },
+    canEditSession: true,
+    setColdScope: vi.fn(),
+    restoreSeededScope: vi.fn(),
+  });
+
+  return renderToStaticMarkup(<ScopePage />);
+}
+
+function renderAttendingCustomerScope() {
+  useSessionMock.mockReturnValue({
+    graph: initialSessionGraph,
+    brand: { partnerName: "CDW" },
+    viewer: { actor: "cpm", name: "Casey", org: "Customer" },
     canEditSession: false,
+    setColdScope: vi.fn(),
+    restoreSeededScope: vi.fn(),
   });
 
   return renderToStaticMarkup(<ScopePage />);
@@ -94,24 +111,82 @@ function renderPartnerScope() {
   return renderToStaticMarkup(<ScopePage />);
 }
 
-describe("read-only vendor Scope navigation", () => {
-  it("shows disabled plan navigation until scope is complete", () => {
-    const markup = renderVendorScope(false);
+describe("customer door Scope", () => {
+  it("shows account lookup and keeps plan disabled until cold scope is complete", () => {
+    const markup = renderCustomerScope(false);
 
+    expect(markup).toContain("Customer entry");
+    expect(markup).toContain("Look up your account");
     expect(markup).toContain("Review session plan");
     expect(markup).toContain("disabled");
-    expect(markup).toContain("The session plan is available when scoping is complete.");
     expect(markup).not.toContain('href="/plan"');
+    expect(markup).not.toContain("Close date pushed");
   });
 
-  it("links to the plan when scope is complete without exposing edit controls", () => {
-    const markup = renderVendorScope(true);
+  it("does not expose partner CRM edit controls on the customer door", () => {
+    const markup = renderCustomerScope(true);
 
-    expect(markup).toContain('href="/plan"');
-    expect(markup).toContain("Scope complete.");
+    expect(markup).toContain("Customer entry");
     expect(markup).not.toContain("Start without the record");
     expect(markup).not.toContain("Use account record instead");
     expect(markup).not.toContain("Close date pushed");
+  });
+
+  it("shows lookup on a partner-led session opened from the customer door before a format is chosen", () => {
+    useSessionMock.mockReturnValue({
+      graph: {
+        ...initialSessionGraph,
+        session: { ...initialSessionGraph.session, customerDoor: true },
+      },
+      brand: { partnerName: "CDW" },
+      viewer: { actor: "cpm", name: "Casey", org: "Customer" },
+      canEditSession: false,
+      setColdScope: vi.fn(),
+      restoreSeededScope: vi.fn(),
+    });
+
+    const markup = renderToStaticMarkup(<ScopePage />);
+
+    expect(markup).toContain("Customer entry");
+    expect(markup).toContain("Look up your account");
+    expect(markup).not.toContain("You are attending.");
+  });
+
+  it("shows lookup after a format is chosen from the customer door", () => {
+    const started = chooseCustomerFormat(
+      { ...initialSessionGraph, session: { ...initialSessionGraph.session, customerDoor: true } },
+      "value-sprint",
+    );
+    useSessionMock.mockReturnValue({
+      graph: started,
+      brand: { partnerName: "CDW" },
+      viewer: { actor: "cpm", name: "Casey", org: "Customer" },
+      canEditSession: true,
+      setColdScope: vi.fn(),
+      restoreSeededScope: vi.fn(),
+    });
+
+    const markup = renderToStaticMarkup(<ScopePage />);
+
+    expect(markup).toContain("Look up your account");
+    expect(markup).not.toContain("You are attending.");
+    expect(started.session.customerName).toBe("Heartland Mutual Insurance");
+    expect(started.session.delivery).toBe("self-service");
+  });
+
+  it("shows the account and the known pain, with no lookup, to an attending customer", () => {
+    const markup = renderAttendingCustomerScope();
+
+    expect(markup).toContain("You are attending. The pain is already on the account.");
+    expect(markup).toContain("Heartland Mutual Insurance");
+    expect(markup).toContain("Known pain");
+    expect(markup).toContain("Intake sits six days, mostly manual PDF reading.");
+    expect(markup).toContain('href="/run"');
+    expect(markup).not.toContain("Look up your account");
+    expect(markup).not.toContain("Customer entry");
+    expect(markup).not.toContain("Company name");
+    expect(markup).not.toContain("Close date pushed");
+    expect(markup).not.toContain("Start without the record");
   });
 });
 
@@ -119,6 +194,8 @@ describe("partner context", () => {
   it("shows one prefilled context field and one save action", () => {
     const markup = renderPartnerScope();
 
+    expect(markup).not.toContain("Look up your account");
+    expect(markup).not.toContain("Company name");
     expect(markup).toContain("Partner context");
     expect(markup).toContain("Claims leadership wants an October review.");
     expect(markup).toContain("Save context");
@@ -169,6 +246,31 @@ describe("partner context", () => {
 
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save context" })).toBeEnabled();
+  });
+});
+
+describe("Google PDM scope", () => {
+  it("does not ask the PDM to look up the account", () => {
+    useSessionMock.mockReturnValue({
+      graph: initialSessionGraph,
+      brand: { partnerName: "CDW" },
+      viewer: { actor: "pdm", name: "Priya Raghavan", org: "Google" },
+      canEditSession: true,
+      applyClaimsChoice: vi.fn(),
+      applyFunding: vi.fn(),
+      applyPattern: vi.fn(),
+      applyReusePilot: vi.fn(),
+      savePartnerNote: vi.fn(),
+      setColdScope: vi.fn(),
+      restoreSeededScope: vi.fn(),
+    });
+
+    const markup = renderToStaticMarkup(<ScopePage />);
+
+    expect(markup).toContain("Scope the value session");
+    expect(markup).toContain("Heartland Mutual Insurance");
+    expect(markup).not.toContain("Look up your account");
+    expect(markup).not.toContain("Company name");
   });
 });
 

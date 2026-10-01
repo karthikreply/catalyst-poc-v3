@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { initialSessionGraph } from "@/lib/seed";
-import { applyColdScope, coldScopeDefaults, saveSessionOutcome, updateCapture } from "@/lib/session";
+import { applyColdScope, chooseCustomerFormat, coldScopeDefaults, saveSessionOutcome, updateCapture } from "@/lib/session";
 
 const { useSessionMock } = vi.hoisted(() => ({
   useSessionMock: vi.fn(),
@@ -195,7 +195,11 @@ describe("board-slide close", () => {
 });
 
 describe("agenda step navigation", () => {
-  function mockAgendaAt(stepId: string, setActiveStep = vi.fn()) {
+  function mockAgendaAt(
+    stepId: string,
+    setActiveStep = vi.fn(),
+    extras: { canEditSession?: boolean; viewer?: { actor: string; name: string; org: string } } = {},
+  ) {
     useSessionMock.mockReturnValue({
       graph: {
         ...initialSessionGraph,
@@ -205,8 +209,8 @@ describe("agenda step navigation", () => {
         })),
       },
       brand: { partnerName: "CDW" },
-      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
-      canEditSession: true,
+      viewer: extras.viewer ?? { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      canEditSession: extras.canEditSession ?? true,
       addCapture: vi.fn(),
       updateCapture: vi.fn(),
       saveSessionOutcome: vi.fn(),
@@ -239,6 +243,101 @@ describe("agenda step navigation", () => {
     expect(setActiveStep).toHaveBeenCalledWith("volume-and-cost");
   });
 
+  it("still moves the agenda on a read-only session", () => {
+    const setActiveStep = mockAgendaAt("constraints", vi.fn(), {
+      canEditSession: false,
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+    });
+    render(<RunPage />);
+
+    expect(screen.getByText(/Historical session record/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Skip to rank" })).toHaveAttribute("href", "/rank");
+    fireEvent.click(screen.getAllByRole("button", { name: /Continue to Shape the pilot/i })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /Back to Volume and cost/i })[0]);
+
+    expect(setActiveStep).toHaveBeenCalledWith("shape-the-pilot");
+    expect(setActiveStep).toHaveBeenCalledWith("volume-and-cost");
+    expect(screen.queryByRole("button", { name: "Add capture" })).not.toBeInTheDocument();
+  });
+
+  it("shows one continue and no partner confirmer controls for a customer value step", () => {
+    const started = chooseCustomerFormat(initialSessionGraph, "value-sprint");
+    const graph = applyColdScope(started, coldScopeDefaults.company, coldScopeDefaults.attendees);
+    useSessionMock.mockReturnValue({
+      graph,
+      brand: { partnerName: "CDW" },
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      canEditSession: true,
+      addCapture: vi.fn(),
+      updateCapture: vi.fn(),
+      saveSessionOutcome: vi.fn(),
+      setActiveStep: vi.fn(),
+      updateValue: vi.fn(),
+      updateValueConfirmer: vi.fn(),
+      updateCostInput: vi.fn(),
+      freezeLedgerNow: vi.fn(),
+    });
+    render(<RunPage />);
+
+    expect(screen.getByRole("heading", { name: "Walk me through what happens when a claim arrives." })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Continue to Volume and cost/i })).toHaveLength(1);
+    expect(screen.queryByText(/not facilitator-verified/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Confirmer for/i })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Claims per day")).toBeInTheDocument();
+    expect(screen.getByLabelText("Avoidable delay")).toBeInTheDocument();
+    expect(screen.getByLabelText("Handling cost")).toBeInTheDocument();
+  });
+
+  it("keeps partner confirmer controls and repeated continue actions on a self-service value step", () => {
+    const started = chooseCustomerFormat(initialSessionGraph, "value-sprint");
+    const graph = applyColdScope(started, coldScopeDefaults.company, coldScopeDefaults.attendees);
+    useSessionMock.mockReturnValue({
+      graph,
+      brand: { partnerName: "CDW" },
+      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      canEditSession: true,
+      addCapture: vi.fn(),
+      updateCapture: vi.fn(),
+      saveSessionOutcome: vi.fn(),
+      setActiveStep: vi.fn(),
+      updateValue: vi.fn(),
+      updateValueConfirmer: vi.fn(),
+      updateCostInput: vi.fn(),
+      freezeLedgerNow: vi.fn(),
+    });
+    render(<RunPage />);
+
+    expect(screen.getAllByRole("button", { name: /Continue to Volume and cost/i }).length).toBeGreaterThan(1);
+    expect(screen.getByRole("combobox", { name: "Confirmer for Claims per day" })).toBeInTheDocument();
+    expect(screen.getAllByText(/not facilitator-verified/).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Claims per day")).toBeInTheDocument();
+  });
+
+  it("shows the self-service line, not the historical banner, for an editable customer", () => {
+    useSessionMock.mockReturnValue({
+      graph: {
+        ...initialSessionGraph,
+        session: { ...initialSessionGraph.session, delivery: "self-service" },
+      },
+      brand: { partnerName: "CDW" },
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      canEditSession: true,
+      addCapture: vi.fn(),
+      updateCapture: vi.fn(),
+      saveSessionOutcome: vi.fn(),
+      setActiveStep: vi.fn(),
+      updateValue: vi.fn(),
+      updateValueConfirmer: vi.fn(),
+      updateCostInput: vi.fn(),
+      freezeLedgerNow: vi.fn(),
+    });
+    render(<RunPage />);
+
+    expect(screen.getByText(/Customer self-service/)).toBeInTheDocument();
+    expect(screen.queryByText(/Historical session record/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/editing remains partner-owned/)).not.toBeInTheDocument();
+  });
+
   it("offers Rank solutions on the last step instead of Continue", () => {
     mockAgendaAt("owner-and-ask");
     render(<RunPage />);
@@ -249,5 +348,70 @@ describe("agenda step navigation", () => {
     expect(rankLinks.length).toBeGreaterThan(0);
     expect(rankLinks[0]).toHaveAttribute("href", "/rank");
     expect(screen.getAllByRole("button", { name: /Back to Shape the pilot/i }).length).toBeGreaterThan(0);
+  });
+});
+
+describe("handoff controls", () => {
+  function mockStep(
+    stepId: string,
+    viewer = { actor: "partner", name: "Ravi Menon", org: "CDW" },
+    recordHandoff = vi.fn(),
+  ) {
+    useSessionMock.mockReturnValue({
+      graph: {
+        ...initialSessionGraph,
+        agenda: initialSessionGraph.agenda.map((step) => ({
+          ...step,
+          state: step.id === stepId ? "active" : step.order < (initialSessionGraph.agenda.find((item) => item.id === stepId)?.order ?? 1) ? "done" : "upcoming",
+        })),
+      },
+      brand: { partnerName: "CDW" },
+      viewer,
+      canEditSession: viewer.actor !== "cpm",
+      addCapture: vi.fn(),
+      updateCapture: vi.fn(),
+      saveSessionOutcome: vi.fn(),
+      setActiveStep: vi.fn(),
+      updateValue: vi.fn(),
+      updateValueConfirmer: vi.fn(),
+      updateCostInput: vi.fn(),
+      freezeLedgerNow: vi.fn(),
+      recordHandoff,
+    });
+    return recordHandoff;
+  }
+
+  it("shows the three controls to the partner on Owner and ask and records the choice", () => {
+    const recordHandoff = mockStep("owner-and-ask");
+    render(<RunPage />);
+
+    expect(screen.getByText("Not yet handed off")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Prepare the DAF claim/i })).toHaveAttribute("href", "/funding");
+    fireEvent.click(screen.getByRole("button", { name: "File the pilot" }));
+    expect(recordHandoff).toHaveBeenCalledWith("pilot");
+    fireEvent.click(screen.getByRole("button", { name: "Notify the PDM" }));
+    expect(recordHandoff).toHaveBeenCalledWith("pdm-notified");
+    fireEvent.click(screen.getByRole("link", { name: /Prepare the DAF claim/i }));
+    expect(recordHandoff).toHaveBeenCalledWith("daf");
+  });
+
+  it("hides the controls on earlier steps", () => {
+    mockStep("constraints");
+    render(<RunPage />);
+
+    expect(screen.queryByRole("button", { name: "File the pilot" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Prepare the DAF claim/i })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+    { actor: "pdm", name: "Priya Raghavan", org: "Google" },
+  ])("never shows the controls to the $actor", (viewer) => {
+    mockStep("owner-and-ask", viewer);
+    render(<RunPage />);
+
+    expect(screen.queryByRole("button", { name: "File the pilot" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Notify the PDM" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Prepare the DAF claim/i })).not.toBeInTheDocument();
   });
 });
