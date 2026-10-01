@@ -219,6 +219,59 @@ describe("Try it", () => {
     expect(markup).not.toContain("AI-powered");
   });
 
+  it("opens the summary from Next on the last marked claim and still walks earlier claims", () => {
+    let graph = startSampleRun(lockExtraction(), "partner", "Ravi Menon", at);
+    for (const claim of sampleClaims.slice(0, 7)) {
+      graph = markSampleClaim(graph, "partner", claim.id, "right", [], "Ravi Menon", at, true);
+    }
+    graph = setSamplePosition(graph, "partner", 7);
+    const view = render(<Harness initial={graph} />);
+
+    expect(screen.getByRole("heading", { name: "Claim 8 of 8" })).toBeTruthy();
+    expect(screen.getByText("7 of 8 reviewed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Needs a fix" }));
+    fireEvent.click(screen.getByRole("button", { name: "Date of loss" }));
+    expect(screen.getByRole("button", { name: "Date of loss" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("heading", { name: "Claim 8 of 8" })).toBeTruthy();
+    expect(screen.getByText("8 of 8 reviewed")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "7 of 8 look right" })).toBeTruthy();
+    expect(screen.getByText("1 need a fix.")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Claim 8 of 8" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Book the hackathon" }).getAttribute("href")).toBe("/artifact");
+
+    fireEvent.click(screen.getByRole("button", { name: "Review answers" }));
+    expect(screen.getByRole("heading", { name: "Claim 1 of 8" })).toBeTruthy();
+    for (let step = 0; step < 6; step += 1) {
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    }
+    expect(screen.getByRole("heading", { name: "Claim 7 of 8" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Claim 8 of 8" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "7 of 8 look right" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Looks right" }));
+    expect(screen.getByRole("heading", { name: "Claim 8 of 8" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Looks right" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "8 of 8 look right" })).toBeTruthy();
+    expect(screen.getByText("0 need a fix.")).toBeTruthy();
+
+    view.unmount();
+    cleanup();
+
+    let earlier = startSampleRun(lockExtraction(), "partner", "Ravi Menon", at);
+    for (const claim of sampleClaims.slice(0, 6)) {
+      earlier = markSampleClaim(earlier, "partner", claim.id, "right", [], "Ravi Menon", at, true);
+    }
+    earlier = setSamplePosition(earlier, "partner", 6);
+    render(<Harness initial={earlier} />);
+    expect(screen.getByRole("heading", { name: "Claim 7 of 8" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Claim 8 of 8" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /look right/ })).toBeNull();
+  });
+
   it("previews day two after booking and never offers a book action", () => {
     const draft = {
       date: "2026-10-14",

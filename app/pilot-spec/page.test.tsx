@@ -120,4 +120,41 @@ describe("pilot spec", () => {
     expect(pdm).toContain("Not run yet");
     expect(pdm).not.toContain('href="/try"');
   });
+
+  it("shows the booked hackathon, and no hackathon section before booking", () => {
+    const ids = rankedSolutions(initialSessionGraph).map((solution) => solution.id).slice(0, 3);
+    const selected = ids.reduce((current, id) => toggleSelected(current, id), initialSessionGraph);
+    const booked = bookHackathon(selected, {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Dana Reyes",
+      question: "Can we prove the three?",
+    });
+    function renderFor(graph: typeof booked, actor: string) {
+      useSessionMock.mockReturnValue({ graph, brand: brands.cdw, viewer: { actor, name: "Someone", org: "Org" } });
+      return renderToStaticMarkup(<PilotSpecPage />);
+    }
+
+    expect(renderFor(selected, "customer")).not.toContain("Your hackathon");
+
+    const customer = renderFor(booked, "customer");
+    expect(customer).toContain("Your hackathon");
+    expect(customer).toContain("2026-10-14 to 2026-10-16 · Showcase 2026-10-16 · 14:00");
+    expect(customer).toContain("Can we prove the three?");
+    expect(customer).toContain("Priya Raghavan");
+    expect(customer).toContain("Ravi Menon");
+    for (const title of bookedSolutionTitles(booked)) expect(customer).toContain(title);
+    expect(customer).toContain("Products for ");
+    expect(customer.indexOf("Your hackathon")).toBeLessThan(customer.indexOf("Day 2."));
+    expect(customer).toContain("Pilot not yet chosen.");
+    expect(customer).toContain('href="/artifact"');
+    expect(customer.match(/What the three days will be\./g)).toHaveLength(1);
+
+    const title = bookedSolutionTitles(booked)[0];
+    const picked = renderFor(setPilotPick(booked, booked.hackathon!.solutionIds[0]), "pdm");
+    expect(picked).toContain(`Pilot:</span> ${title}`);
+    expect(picked).toContain("Open business case");
+    expect(renderFor(booked, "pdm")).not.toContain("Choose on the business case");
+  });
 });

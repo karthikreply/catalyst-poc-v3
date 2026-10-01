@@ -1099,6 +1099,13 @@ export function showcaseLabel(showcaseAt: string): string {
   return time ? `${date} · ${time}` : showcaseAt;
 }
 
+/** "2026-10-14" → "2026-10-14 to 2026-10-16", the three hackathon days. */
+export function hackathonDaysLabel(hackathonDate: string): string {
+  const date = hackathonDate.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  return `${date} to ${shiftIsoDate(date, 2)}`;
+}
+
 export type BookedSolutionPain = { id: string; title: string; pain: string };
 
 /**
