@@ -61,6 +61,7 @@ type SessionContextValue = {
   viewer: Viewer;
   setBrandId: (id: BrandId) => void;
   setActor: (actor: Actor) => void;
+  setCustomerDoor: (open: boolean) => void;
   setDelivery: (delivery: Delivery) => void;
   setMechanic: (mechanic: Mechanic) => void;
   setCloseStyle: (closeStyle: CloseStyle) => void;
@@ -180,7 +181,22 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   function setActor(next: Actor) {
     setActorState(next);
     sessionStorage.setItem(ACTOR_KEY, next);
-    setGraph((current) => graphForActor(current, next));
+    setGraph((current) => {
+      const nextGraph = graphForActor(current, next);
+      if (next === "cpm" || nextGraph.session.customerDoor !== true) return nextGraph;
+      return {
+        ...nextGraph,
+        session: { ...nextGraph.session, customerDoor: false },
+      };
+    });
+  }
+
+  function setCustomerDoor(open: boolean) {
+    setGraph((current) => (
+      current.session.customerDoor === open
+        ? current
+        : { ...current, session: { ...current.session, customerDoor: open } }
+    ));
   }
 
   function setDelivery(delivery: Delivery) {
@@ -411,6 +427,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     viewer,
     setBrandId,
     setActor,
+    setCustomerDoor,
     setDelivery,
     setMechanic,
     setCloseStyle,

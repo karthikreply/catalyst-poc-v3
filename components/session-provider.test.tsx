@@ -137,6 +137,55 @@ describe("SessionProvider action permissions", () => {
     expect(screen.getByLabelText("claims-quantity")).toHaveTextContent("275");
   });
 
+  it("clears the customer door when leaving the customer and does not change delivery", async () => {
+    function CustomerDoorProbe() {
+      const { graph, setActor, setCustomerDoor } = useSession();
+      return (
+        <>
+          <output aria-label="customer-door">{String(graph.session.customerDoor)}</output>
+          <output aria-label="delivery">{graph.session.delivery}</output>
+          <output aria-label="mechanic">{graph.session.mechanic}</output>
+          <output aria-label="account">{graph.session.customerName}</output>
+          <button type="button" onClick={() => setCustomerDoor(true)}>Open customer door</button>
+          <button type="button" onClick={() => setActor("cpm")}>View as customer</button>
+          <button type="button" onClick={() => setActor("partner")}>View as partner</button>
+          <button type="button" onClick={() => setActor("pdm")}>View as pdm</button>
+        </>
+      );
+    }
+
+    render(
+      <SessionProvider>
+        <CustomerDoorProbe />
+      </SessionProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText("delivery")).toHaveTextContent("facilitated"));
+    expect(screen.getByLabelText("customer-door")).toHaveTextContent("false");
+    expect(screen.getByLabelText("account")).toHaveTextContent("Heartland Mutual Insurance");
+
+    fireEvent.click(screen.getByRole("button", { name: "View as customer" }));
+    expect(screen.getByLabelText("customer-door")).toHaveTextContent("false");
+    expect(screen.getByLabelText("delivery")).toHaveTextContent("facilitated");
+    expect(screen.getByLabelText("mechanic")).toHaveTextContent("value-sprint");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open customer door" }));
+    expect(screen.getByLabelText("customer-door")).toHaveTextContent("true");
+    expect(screen.getByLabelText("delivery")).toHaveTextContent("facilitated");
+    expect(screen.getByLabelText("mechanic")).toHaveTextContent("value-sprint");
+    expect(screen.getByLabelText("account")).toHaveTextContent("Heartland Mutual Insurance");
+
+    fireEvent.click(screen.getByRole("button", { name: "View as partner" }));
+    expect(screen.getByLabelText("customer-door")).toHaveTextContent("false");
+    expect(screen.getByLabelText("delivery")).toHaveTextContent("facilitated");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open customer door" }));
+    fireEvent.click(screen.getByRole("button", { name: "View as pdm" }));
+    expect(screen.getByLabelText("customer-door")).toHaveTextContent("false");
+    expect(screen.getByLabelText("delivery")).toHaveTextContent("facilitated");
+    expect(screen.getByLabelText("mechanic")).toHaveTextContent("value-sprint");
+  });
+
   it("still opens the partner view when storage is blocked", async () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("storage blocked");

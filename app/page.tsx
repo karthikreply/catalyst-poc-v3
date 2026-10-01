@@ -28,7 +28,7 @@ const entryDoors: { actor: Actor; title: string; tool: string; note?: string }[]
 ];
 
 export default function Home() {
-  const { graph, viewer, setActor, hydrated } = useSession();
+  const { graph, viewer, setActor, setCustomerDoor, hydrated } = useSession();
   const router = useRouter();
   const customerViewer = viewer.actor === "cpm";
   // Commercially the handoff window is 48 hours after the room. That is a definition, not a filter:
@@ -68,7 +68,15 @@ export default function Home() {
             <button
               key={door.actor}
               type="button"
-              onClick={() => setActor(door.actor)}
+              onClick={() => {
+                if (door.actor === "cpm") {
+                  setActor("cpm");
+                  setCustomerDoor(true);
+                  router.push("/customer");
+                  return;
+                }
+                setActor(door.actor);
+              }}
               className={`md-card-outlined p-5 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--md-sys-color-primary)_5%,var(--md-sys-color-surface))] ${viewer.actor === door.actor ? "ring-2 ring-[var(--md-sys-color-primary)]" : ""}`}
             >
               <p className="md-title-medium">{door.title}</p>

@@ -23,7 +23,7 @@ import {
   demonstrationColdAccount,
   enrichAttendeeName,
   withDemonstrationColdAccount,
-  isSessionReadOnly,
+  isCustomerAttending,
   isValidExactClaimsVolume,
   missingColdRoles,
   type ClaimsVolumeChoice,
@@ -149,8 +149,8 @@ export default function ScopePage() {
     />
   );
 
-  // Same rule as Run: a customer on a partner-led session attends it. No lookup, no door.
-  if (viewer.actor === "cpm" && isSessionReadOnly(viewer.actor, graph)) {
+  // Partner-led, and not the Customer card: attend the session. No lookup, no door.
+  if (isCustomerAttending(viewer.actor, graph)) {
     return (
       <div className="mx-auto max-w-5xl px-5 py-8 lg:px-8">
         <p className="text-sm text-black/48">Attending</p>

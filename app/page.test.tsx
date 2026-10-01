@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
+import { fireEvent, render } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const useSessionMock = vi.fn();
 const replace = vi.hoisted(() => vi.fn());
+const push = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace }),
+  useRouter: () => ({ replace, push }),
 }));
 vi.mock("@/components/session-provider", () => ({
   useSession: () => useSessionMock(),
@@ -32,7 +33,38 @@ function sessionFor(actor: string, hydrated: boolean, graph = initialSessionGrap
 }
 
 describe("program dashboard", () => {
-  beforeEach(() => replace.mockReset());
+  beforeEach(() => {
+    replace.mockReset();
+    push.mockReset();
+  });
+
+  it("opens the customer door from the Customer card without using the viewer dropdown", () => {
+    const setActor = vi.fn();
+    const setCustomerDoor = vi.fn();
+    useSessionMock.mockReturnValue({
+      viewer: { actor: "partner", name: "Ravi Menon", org: "Org" },
+      setActor,
+      setCustomerDoor,
+      hydrated: true,
+      graph: initialSessionGraph,
+    });
+
+    const view = render(<Home />);
+    fireEvent.click(view.getByRole("button", { name: /^Customer/ }));
+
+    expect(setActor).toHaveBeenCalledWith("cpm");
+    expect(setCustomerDoor).toHaveBeenCalledWith(true);
+    expect(push).toHaveBeenCalledWith("/customer");
+    expect(replace).not.toHaveBeenCalled();
+
+    setActor.mockClear();
+    setCustomerDoor.mockClear();
+    push.mockClear();
+    fireEvent.click(view.getByRole("button", { name: /^Partner/ }));
+    expect(setActor).toHaveBeenCalledWith("partner");
+    expect(setCustomerDoor).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+  });
 
   it("renders no Telemetry control for the customer", () => {
     sessionFor("cpm", true);

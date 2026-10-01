@@ -81,6 +81,8 @@ export type Session = {
   scopeMode: ScopeMode;
   /** Customer door: true once a format card has started the customer session. */
   customerFormatChosen?: boolean;
+  /** Self-service arrival from the Customer card. Starts false. Viewing as does not set it. */
+  customerDoor: boolean;
   /** Partner's handoff after the session. Null until recorded. */
   handoff: Handoff | null;
 };
@@ -318,6 +320,7 @@ export const initialSessionGraph: SessionGraph = {
     reusePriorPilotSpec: true,
     claimsVolumeChoice: null,
     scopeMode: "seeded",
+    customerDoor: false,
     handoff: null,
   },
   agenda: [

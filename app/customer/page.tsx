@@ -13,7 +13,7 @@ import {
   customerHomeSummary,
   googleCalendarComposeUrl,
   handoffLabel,
-  isSessionReadOnly,
+  isCustomerAttending,
 } from "@/lib/session";
 import { formatCurrency } from "@/lib/value";
 
@@ -28,8 +28,8 @@ export default function CustomerHomePage() {
   const hasAccount = customerHasAccount(viewer.actor, graph);
   const booked = Boolean(graph.hackathon?.booked);
   const scheduleUrl = booked ? googleCalendarComposeUrl(graph, brand.partnerName) : "";
-  // Same rule as Run: a customer on a partner-led session attends it rather than starting their own.
-  const attending = isSessionReadOnly(viewer.actor, graph);
+  // Partner-led, and not the Customer card: attend the session. The card opens the format door.
+  const attending = isCustomerAttending(viewer.actor, graph);
   const handoff = handoffLabel(graph.session.handoff);
 
   if (viewer.actor !== "cpm") {
@@ -66,7 +66,28 @@ export default function CustomerHomePage() {
             <Link href="/run" className="md-button-filled">
               Open the session <ArrowRight className="size-4" />
             </Link>
+            <Link href="/funding" className="md-button-outlined">View funding pack</Link>
           </div>
+        </section>
+
+        <section className="md-card-outlined mt-6 p-6" aria-labelledby="attending-schedule-title">
+          <h2 id="attending-schedule-title" className="md-title-large">Schedule a hackathon</h2>
+          {booked && scheduleUrl ? (
+            <a href={scheduleUrl} target="_blank" rel="noreferrer" className="md-button-filled mt-4">
+              Open calendar <ArrowRight className="size-4" />
+            </a>
+          ) : (
+            <div className="mt-4">
+              <p className="md-body-medium text-[var(--md-sys-color-on-surface-variant)]">Book the hackathon first.</p>
+              <div className="mt-3">
+                <UnavailableControl
+                  label="Open calendar"
+                  owner={brand.partnerName}
+                  explanation="Book the hackathon first."
+                />
+              </div>
+            </div>
+          )}
         </section>
       </div>
     );

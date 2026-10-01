@@ -132,6 +132,48 @@ describe("customer door Scope", () => {
     expect(markup).not.toContain("Close date pushed");
   });
 
+  it("shows lookup on a partner-led session opened from the customer door before a format is chosen", () => {
+    useSessionMock.mockReturnValue({
+      graph: {
+        ...initialSessionGraph,
+        session: { ...initialSessionGraph.session, customerDoor: true },
+      },
+      brand: { partnerName: "CDW" },
+      viewer: { actor: "cpm", name: "Casey", org: "Customer" },
+      canEditSession: false,
+      setColdScope: vi.fn(),
+      restoreSeededScope: vi.fn(),
+    });
+
+    const markup = renderToStaticMarkup(<ScopePage />);
+
+    expect(markup).toContain("Customer entry");
+    expect(markup).toContain("Look up your account");
+    expect(markup).not.toContain("You are attending.");
+  });
+
+  it("shows lookup after a format is chosen from the customer door", () => {
+    const started = chooseCustomerFormat(
+      { ...initialSessionGraph, session: { ...initialSessionGraph.session, customerDoor: true } },
+      "value-sprint",
+    );
+    useSessionMock.mockReturnValue({
+      graph: started,
+      brand: { partnerName: "CDW" },
+      viewer: { actor: "cpm", name: "Casey", org: "Customer" },
+      canEditSession: true,
+      setColdScope: vi.fn(),
+      restoreSeededScope: vi.fn(),
+    });
+
+    const markup = renderToStaticMarkup(<ScopePage />);
+
+    expect(markup).toContain("Look up your account");
+    expect(markup).not.toContain("You are attending.");
+    expect(started.session.customerName).toBe("Heartland Mutual Insurance");
+    expect(started.session.delivery).toBe("self-service");
+  });
+
   it("shows the account and the known pain, with no lookup, to an attending customer", () => {
     const markup = renderAttendingCustomerScope();
 

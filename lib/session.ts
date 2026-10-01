@@ -192,6 +192,7 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
       id: sessionId,
       reusePriorPilotSpec: value.session.reusePriorPilotSpec ?? (cold ? null : true),
       ...(value.session.customerFormatChosen ? { customerFormatChosen: true } : {}),
+      customerDoor: value.session.customerDoor === true,
       handoff: hydrateHandoff(value.session.handoff),
     },
     valueInputs: legacyCold
@@ -625,6 +626,11 @@ export function isSessionReadOnly(actor: Actor, graph: SessionGraph) {
   if (actor !== "cpm") return false;
   // Customer can run a self-service or cold session. A facilitated Heartland record stays the partner's evidence.
   return graph.session.delivery !== "self-service" && graph.session.scopeMode !== "cold";
+}
+
+/** Partner-led session the customer is sitting in. The Customer card opens the door instead. */
+export function isCustomerAttending(actor: Actor, graph: SessionGraph) {
+  return isSessionReadOnly(actor, graph) && graph.session.customerDoor !== true;
 }
 
 export function canViewPartnerScope(actor: Actor) {

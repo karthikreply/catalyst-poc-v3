@@ -54,6 +54,7 @@ import {
   inputsConfirmedByCopy,
   missingColdRoles,
   isQualified,
+  isCustomerAttending,
   isSessionReadOnly,
   pdmPartnerInvitationCopy,
   preworkForMechanic,
@@ -1114,6 +1115,26 @@ describe("customer home", () => {
     expect(customerHomeSummary(sprint, "CDW").format).toBe("Prioritize my use cases");
     expect(hydrateSessionGraph(JSON.parse(JSON.stringify(sprint))).session.customerFormatChosen).toBe(true);
     expect(hydrateSessionGraph(JSON.parse(JSON.stringify(initialSessionGraph))).session.customerFormatChosen).toBeFalsy();
+  });
+
+  it("loads a missing customer door as closed and keeps an open door", () => {
+    expect(initialSessionGraph.session.customerDoor).toBe(false);
+    const legacy = JSON.parse(JSON.stringify(initialSessionGraph)) as typeof initialSessionGraph;
+    delete (legacy.session as { customerDoor?: boolean }).customerDoor;
+    expect(hydrateSessionGraph(legacy).session.customerDoor).toBe(false);
+
+    const opened = hydrateSessionGraph({
+      ...initialSessionGraph,
+      session: { ...initialSessionGraph.session, customerDoor: true },
+    });
+    expect(opened.session.customerDoor).toBe(true);
+    expect(opened.session.delivery).toBe("facilitated");
+    expect(opened.session.mechanic).toBe(initialSessionGraph.session.mechanic);
+    expect(opened.session.customerName).toBe(initialSessionGraph.session.customerName);
+    expect(isCustomerAttending("cpm", initialSessionGraph)).toBe(true);
+    expect(isCustomerAttending("cpm", opened)).toBe(false);
+    expect(isCustomerAttending("cpm", chooseCustomerFormat(opened, "value-sprint"))).toBe(false);
+    expect(isCustomerAttending("partner", opened)).toBe(false);
   });
 
   it("shows the account, stage, and value only once captured on the cold session", () => {

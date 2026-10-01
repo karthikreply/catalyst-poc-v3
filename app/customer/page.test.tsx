@@ -54,9 +54,49 @@ describe("customer home", () => {
     expect(markup).not.toContain("File the pilot");
     expect(markup).not.toContain("Notify the PDM");
     expect(markup).not.toContain("Telemetry");
-    expect(markup).not.toContain("View funding pack");
+    expect(markup).toContain("View funding pack");
+    expect(markup).toContain('href="/funding"');
+    expect(markup).toContain("Book the hackathon first.");
+    expect(markup).not.toContain("calendar.google.com");
     expect(markup).not.toContain("Apply for DAF");
-    expect(markup).not.toContain('href="/funding"');
+  });
+
+  it("shows the format choice on a seeded partner-led session opened from the customer door", () => {
+    mockGraph({
+      ...initialSessionGraph,
+      session: { ...initialSessionGraph.session, customerDoor: true },
+    });
+    const markup = renderToStaticMarkup(<CustomerHomePage />);
+
+    expect(markup).toContain("How do you want to start?");
+    expect(markup).toContain("Prioritize my use cases");
+    expect(markup).toContain("Show me the cost of waiting");
+    expect(markup).not.toContain("You are attending.");
+  });
+
+  it("links the attending calendar only when the hackathon is booked", () => {
+    const ids = rankedSolutions(initialSessionGraph).map((solution) => solution.id).slice(0, 3);
+    const booked = bookHackathon(ids.reduce((current, id) => toggleSelected(current, id), initialSessionGraph), {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Devin Cole",
+      question: "Can we prove the three?",
+    });
+    mockGraph(booked);
+    const markup = renderToStaticMarkup(<CustomerHomePage />);
+    const href = markup.match(/href="(https:\/\/calendar\.google\.com[^"]+)"/)?.[1] ?? "";
+    const decoded = decodeURIComponent(href.replace(/&amp;/g, "&").replace(/\+/g, "%20"));
+
+    expect(markup).toContain("You are attending. The pain is already on the account.");
+    expect(markup).toContain("Open calendar");
+    expect(markup).toContain('href="/funding"');
+    expect(decoded).toContain("20261014");
+    expect(decoded).toContain("Partner: CDW");
+    expect(markup).not.toContain("Book the hackathon first.");
+    expect(markup).not.toContain("How do you want to start?");
+    expect(booked.session.delivery).toBe("facilitated");
+    expect(booked.session.customerDoor).not.toBe(true);
   });
 
   it("shows the recorded handoff to the attending customer without the controls", () => {
