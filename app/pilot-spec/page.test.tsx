@@ -157,4 +157,23 @@ describe("pilot spec", () => {
     expect(picked).toContain("Open business case");
     expect(renderFor(booked, "pdm")).not.toContain("Choose on the business case");
   });
+
+  it("names a blank hackathon role as not named yet", () => {
+    const ids = rankedSolutions(initialSessionGraph).map((solution) => solution.id).slice(0, 3);
+    const booked = bookHackathon(ids.reduce((current, id) => toggleSelected(current, id), initialSessionGraph), {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Dana Reyes",
+      question: "Can we prove the three?",
+    });
+    const blank = {
+      ...booked,
+      hackathon: { ...booked.hackathon!, googleFacilitator: "  ", partnerSpecialist: "" },
+    };
+    useSessionMock.mockReturnValue({ graph: blank, brand: brands.cdw, viewer: { actor: "customer", name: "Dana", org: "Heartland" } });
+    const markup = renderToStaticMarkup(<PilotSpecPage />);
+    expect(markup.match(/Not named yet/g)).toHaveLength(2);
+    expect(markup).toContain("Dana Reyes");
+  });
 });

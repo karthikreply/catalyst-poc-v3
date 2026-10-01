@@ -214,6 +214,7 @@ describe("Try it", () => {
     expect(markup).toContain("A sample run for this solution isn&#x27;t available yet.");
     expect(markup).toContain("The hackathon will start from your own documents.");
     expect(markup).toContain('href="/artifact"');
+    expect(markup).not.toContain("Select three solutions first.");
     expect(markup).not.toContain("Run on the sample claims");
     expect(markup).not.toContain("sandbox");
     expect(markup).not.toContain("AI-powered");
@@ -304,5 +305,15 @@ describe("Try it", () => {
     const unavailable = bookHackathon(lockExtraction(moveSolution(initialSessionGraph, "sol-intake-extraction", "down")), draft);
     useSessionMock.mockReturnValue(sessionValue(unavailable, "partner"));
     expect(renderToStaticMarkup(<TryPage />)).not.toContain("Book the hackathon");
+  });
+
+  it("explains a disabled book button", () => {
+    useSessionMock.mockReturnValue(sessionValue(initialSessionGraph, "pdm"));
+    const markup = renderToStaticMarkup(<TryPage />);
+    expect(markup).toContain("The partner or customer books the hackathon.");
+    expect(markup).not.toContain('href="/artifact"');
+    const describedBy = markup.match(/aria-describedby="([^"]+)"/)?.[1];
+    expect(describedBy).toBeTruthy();
+    expect(markup).toContain(`id="${describedBy}"`);
   });
 });

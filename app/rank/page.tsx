@@ -1,35 +1,69 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ArrowRight, ArrowUp, Lock, Unlock } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, File, Layers, Lock, ScrollText, Search, Unlock } from "lucide-react";
 
+import { BookHackathonAction } from "@/components/book-hackathon-action";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { HackathonThreeDays } from "@/components/hackathon-three-days";
 import { WhatTheThreeDaysWillBe } from "@/components/what-the-three-days-will-be";
 import { useSession } from "@/components/session-provider";
+import { patterns } from "@/lib/seed";
 import { isCustomerViewer,
   bookedSolutionTitles,
   canBookHackathon,
+  googleProductRoles,
   latestStepCapture,
   rankedSolutions,
   sampleRunHasStarted,
   selectedSolutions,
   showsTryItCard,
-  voteTallies,
 } from "@/lib/session";
+import { patternBookedSignal } from "@/lib/telemetry";
 import { cn } from "@/lib/utils";
+
+const productIcons: Record<string, typeof File> = {
+  "Document AI": File,
+  "Vertex AI": Layers,
+  "Vertex AI Search": Search,
+  "Cloud Logging": ScrollText,
+};
+
+function voteLine(graph: ReturnType<typeof useSession>["graph"], solutionId: string) {
+  const voters = graph.attendees.filter((person) => graph.votes[person.id] === solutionId);
+  if (!voters.length) return null;
+  return `${voters.length} votes · ${voters.map((person) => person.name).join(", ")}`;
+}
+
+function evidenceLine(graph: ReturnType<typeof useSession>["graph"], stepId: string | undefined) {
+  const quotes = graph.captures.filter((capture) => capture.stepId === stepId);
+  if (!quotes.length) return null;
+  const names: string[] = [];
+  for (const quote of quotes) {
+    if (!names.includes(quote.attributedTo)) names.push(quote.attributedTo);
+  }
+  const label = quotes.length === 1 ? "quote" : "quotes";
+  return `${quotes.length} ${label} · ${names.join(", ")}`;
+}
+
+const geminiColors = ["#4285F4", "#EA4335", "#FBBC05", "#34A853"] as const;
+
+function GeminiMark() {
+  const [blue, red, yellow, green] = geminiColors;
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className="size-3.5" data-gemini-mark="">
+      <path stroke={blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
+      <path stroke={red} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M20 2v4" />
+      <path stroke={yellow} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M22 4h-4" />
+      <circle stroke={green} strokeWidth="2" cx="4" cy="20" r="2" />
+    </svg>
+  );
+}
 
 function rankActionClass(primary: boolean) {
   return primary
     ? buttonVariants({ className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })
     : cn(buttonVariants({ variant: "outline" }), "border-black/30 bg-[#f4f4f1] hover:bg-black/[.06]");
-}
-
-function RankBookAction({ mayBook, primary, selectedCount }: { mayBook: boolean; primary: boolean; selectedCount: number }) {
-  if (selectedCount === 3 && mayBook) {
-    return <Link href="/artifact" className={rankActionClass(primary)}>Book the hackathon</Link>;
-  }
-  return <Button type="button" disabled className="opacity-50">Book the hackathon</Button>;
 }
 
 export default function RankPage() {
@@ -49,7 +83,6 @@ export default function RankPage() {
   const locked = graph.ranking.locked;
   const booked = Boolean(graph.hackathon?.booked);
   const coldSample = graph.session.scopeMode === "cold";
-  const tallies = voteTallies(graph);
   const canSelectMore = selectedCount < 3;
   const canSelect = canEditSession || isCustomerViewer(viewer.actor);
   const canReorder = canEditSession;
@@ -57,6 +90,8 @@ export default function RankPage() {
   const showTryCard = showsTryItCard(graph);
   const tried = sampleRunHasStarted(graph);
   const customerViewer = isCustomerViewer(viewer.actor);
+  const patternName = patterns.find((pattern) => pattern.id === graph.session.patternId)?.name;
+  const programSignal = !customerViewer && patternName ? patternBookedSignal(patternName) : null;
   const latestCapture = customerViewer ? latestStepCapture(graph) : null;
   const topThreeTitles = Array.isArray(graph.ranking.selected) && graph.ranking.selected.length
     ? selected.map((solution) => solution.title)
@@ -88,12 +123,8 @@ export default function RankPage() {
             <Link href="/artifact" className={buttonVariants({ className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>
               Open business case <ArrowRight />
             </Link>
-          ) : selectedCount === 3 && mayBook ? (
-            <Link href="/artifact" className={buttonVariants({ className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>
-              Book the hackathon <ArrowRight />
-            </Link>
           ) : (
-            <Button type="button" disabled className="opacity-50">Book the hackathon</Button>
+            <BookHackathonAction primary />
           )}
         </div>
 
@@ -102,13 +133,13 @@ export default function RankPage() {
             <div className="flex flex-wrap gap-3">
               {tried ? (
                 <>
-                  <RankBookAction mayBook={mayBook} primary selectedCount={selectedCount} />
+                  <BookHackathonAction primary />
                   <Link href="/try" className={rankActionClass(false)}>Try it on sample claims</Link>
                 </>
               ) : (
                 <>
                   <Link href="/try" className={rankActionClass(true)}>Try it on sample claims</Link>
-                  <RankBookAction mayBook={mayBook} primary={false} selectedCount={selectedCount} />
+                  <BookHackathonAction />
                 </>
               )}
             </div>
@@ -183,6 +214,8 @@ export default function RankPage() {
             {ordered.map((solution, index) => {
               const isSelected = graph.ranking.selected.includes(solution.id);
               const blockedAdd = !isSelected && !canSelectMore && !locked && !booked;
+              const votes = voteLine(graph, solution.id);
+              const evidence = evidenceLine(graph, solution.stepId);
               return (
                 <li
                   key={solution.id}
@@ -193,25 +226,36 @@ export default function RankPage() {
                 >
                   <span className="text-sm font-semibold text-black/45">{index + 1}</span>
                   <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold">{solution.title}</p>
-                      {isCustomerViewer(viewer.actor) && (
-                        <span className="text-xs text-black/48">{tallies[solution.id] ?? 0} votes</span>
-                      )}
-                    </div>
+                    <p className="font-semibold">{solution.title}</p>
+                    {votes && <p className="mt-1 text-sm text-black/70">{votes}</p>}
+                    {evidence && <p className="mt-1 text-sm text-black/70">{evidence}</p>}
+                    {programSignal && <p className="mt-1 text-xs text-black/48">{programSignal}</p>}
                     <p className="mt-1 text-sm leading-6 text-black/62">{solution.outcome}</p>
                     <p className="mt-1 text-xs text-black/48">{solution.valueAnchor}</p>
                     {solution.products.length > 0 && (
-                      <ul className="mt-2 flex flex-wrap gap-1.5" aria-label={`Products for ${solution.title}`}>
-                        {solution.products.map((product) => (
-                          <li
-                            key={product}
-                            className="rounded-sm border border-black/15 bg-[#fafaf8] px-2 py-0.5 text-xs text-black/65"
-                          >
-                            {product}
-                          </li>
-                        ))}
-                      </ul>
+                      <>
+                        <ul className="mt-2 flex flex-wrap gap-1.5" aria-label={`Products for ${solution.title}`}>
+                          {solution.products.map((product) => {
+                            const Icon = productIcons[product];
+                            return (
+                              <li
+                                key={product}
+                                className="inline-flex items-center gap-1 rounded-sm border border-black/15 bg-[#fafaf8] px-2 py-0.5 text-xs text-black/65"
+                              >
+                                {product === "Gemini" ? <GeminiMark /> : Icon && <Icon className="size-3.5" aria-hidden />}
+                                {product}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                        <ul className="mt-2 space-y-1">
+                          {solution.products.map((product) => (
+                            <li key={product} className="text-xs leading-5 text-black/55">
+                              {googleProductRoles[product] ?? "Google Cloud capability used in the three-day build"}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
                     )}
                     {isCustomerViewer(viewer.actor) && (
                       <div className="mt-3 flex flex-wrap gap-2">
