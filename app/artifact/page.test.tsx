@@ -265,6 +265,24 @@ describe("the three days, on the booked business case", () => {
       expect(markup).toContain(row.title);
       expect(markup).toContain(row.pain.replaceAll("'", "&#x27;"));
     }
+    const section = markup.slice(markup.indexOf("What the three days produce"), markup.indexOf("Google stack for these three days"));
+    const solutionList = section.slice(0, section.indexOf("What the three days will be."));
+    expect(solutionList).not.toContain("Choose");
+    const pilotHeading = section.indexOf("Which one becomes the pilot?");
+    expect(section.indexOf("Start from the pain.")).toBeLessThan(pilotHeading);
+    expect(section.indexOf("Try it on your own documents.")).toBeLessThan(pilotHeading);
+    expect(section.indexOf("Write down what held.")).toBeLessThan(pilotHeading);
+    expect(section.indexOf("Date ·")).toBeGreaterThan(section.indexOf("Write down what held."));
+    expect(section.indexOf("Solution showcase")).toBeGreaterThan(section.indexOf("Date ·"));
+    expect(pilotHeading).toBeGreaterThan(section.indexOf("Solution showcase"));
+    if (viewer.actor === "pdm") {
+      expect(section).not.toContain("Choose");
+    } else {
+      expect(section.indexOf("Write down what held.")).toBeLessThan(section.indexOf("Choose"));
+      for (const row of rows) {
+        expect(section.indexOf(`Choose ${row.title} as the pilot`)).toBeGreaterThan(pilotHeading);
+      }
+    }
   });
 
   it("offers Choose to the partner and the customer, and only the pick to the PDM", () => {
