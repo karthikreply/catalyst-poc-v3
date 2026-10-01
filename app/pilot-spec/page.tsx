@@ -69,9 +69,12 @@ function YourHackathon({ graph, actor }: { graph: SessionGraph; actor: Actor }) 
           ["Google facilitator", booking.googleFacilitator],
           ["Partner specialist", booking.partnerSpecialist],
           ["Customer owner", booking.customerOwner],
-        ].map(([term, detail]) => (
-          <div key={term} className="bg-white p-4"><dt className="text-xs font-medium text-black/45">{term}</dt><dd className="mt-1 text-sm">{detail}</dd></div>
-        ))}
+        ].map(([term, detail]) => {
+          const named = detail.trim() ? detail : "Not named yet";
+          return (
+          <div key={term} className="bg-white p-4"><dt className="text-xs font-medium text-black/45">{term}</dt><dd className="mt-1 text-sm">{named}</dd></div>
+        );
+        })}
       </dl>
       <ul className="mt-5 divide-y divide-black/10 border-y border-black/10">
         {solutions.map((solution) => (

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
+import { BookHackathonAction } from "@/components/book-hackathon-action";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useSession } from "@/components/session-provider";
 import { pilotReadinessItems } from "@/lib/pilot-readiness";
@@ -16,7 +17,6 @@ import {
 } from "@/lib/sample-claims";
 import type { SampleRun } from "@/lib/seed";
 import {
-  canBookHackathon,
   canMutateSampleRun,
   documentExtractionSolution,
   isCustomerViewer,
@@ -36,18 +36,6 @@ function actionClass(primary: boolean) {
   return primary
     ? buttonVariants({ className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })
     : cn(buttonVariants({ variant: "outline" }), "border-black/30 bg-[#f4f4f1] hover:bg-black/[.06]");
-}
-
-function BookHackathon({ primary = false }: { primary?: boolean }) {
-  const { graph, viewer } = useSession();
-  if (graph.hackathon?.booked) return null;
-  const mayBook = canBookHackathon(viewer.actor) && graph.ranking.selected.length === 3;
-  if (!mayBook) {
-    return <Button type="button" disabled className="opacity-50">Book the hackathon</Button>;
-  }
-  return (
-    <Link href="/artifact" className={actionClass(primary)}>Book the hackathon</Link>
-  );
 }
 
 function statusLine(run: SampleRun | null) {
@@ -104,7 +92,7 @@ function UnavailableRun() {
     <div className="mx-auto max-w-3xl px-5 py-10 lg:px-8">
       <h1 className="max-w-2xl text-3xl font-semibold tracking-tight">A sample run for this solution isn&apos;t available yet.</h1>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-black/58">The hackathon will start from your own documents.</p>
-      <div className="mt-6"><BookHackathon /></div>
+      <div className="mt-6"><BookHackathonAction /></div>
     </div>
   );
 }
@@ -115,7 +103,7 @@ function PdmSampleRun({ run }: { run: SampleRun | null }) {
       <h1 className="text-3xl font-semibold tracking-tight">Sample run</h1>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-black/70">Sample runs are partner-held. The platform vendor sees counts in Telemetry.</p>
       <p className="mt-4 text-sm font-medium">{statusLine(run)}</p>
-      <div className="mt-6"><BookHackathon /></div>
+      <div className="mt-6"><BookHackathonAction /></div>
     </div>
   );
 }
@@ -149,7 +137,7 @@ function PartnerSampleRun({ run }: { run: SampleRun | null }) {
           {pilotReadinessItems.map((item) => <li key={item}>{item}</li>)}
         </ul>
       </section>
-      <div className="mt-6"><BookHackathon /></div>
+      <div className="mt-6"><BookHackathonAction /></div>
     </div>
   );
 }
@@ -274,7 +262,7 @@ export default function TryPage() {
       {running && (
         <>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight">Reading eight claims…</h1>
-          <div className="mt-6"><BookHackathon /></div>
+          <div className="mt-6"><BookHackathonAction /></div>
         </>
       )}
 
@@ -289,7 +277,7 @@ export default function TryPage() {
                 Run on the sample claims
               </Button>
             )}
-            <BookHackathon />
+            <BookHackathonAction />
           </div>
           <p className="mt-8 text-xs text-black/45">Illustrative run on made-up claims. The real hackathon uses your own documents.</p>
         </>
@@ -346,7 +334,7 @@ export default function TryPage() {
           <div className="mt-6 flex flex-wrap gap-3">
             <Button type="button" variant="outline" onClick={() => go(index - 1)}>Previous</Button>
             <Button type="button" variant="outline" onClick={() => go(index + 1)}>Next</Button>
-            <BookHackathon />
+            <BookHackathonAction />
           </div>
         </>
       )}
@@ -361,7 +349,7 @@ export default function TryPage() {
             {booked ? (
               <Link href="/pilot-spec" className={actionClass(true)}>Back to the pilot spec</Link>
             ) : (
-              <BookHackathon primary />
+              <BookHackathonAction primary />
             )}
             <Button type="button" variant="outline" onClick={reviewAnswers}>Review answers</Button>
             {canMark && (confirming ? (

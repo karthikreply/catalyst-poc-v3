@@ -40,6 +40,7 @@ import {
   bookedSolutionTitles,
   rankedSolutions,
   canFlagReferenceStory,
+  bookBlockReason,
   canBookHackathon,
   canViewPartnerScope,
   claimsArtifactCopy,
@@ -734,6 +735,19 @@ describe("scope access", () => {
     expect(canViewPartnerScope("customer")).toBe(false);
   });
 
+  it("explains why booking is unavailable, and the role check wins", () => {
+    const three = {
+      ...initialSessionGraph,
+      ranking: { ...initialSessionGraph.ranking, selected: ["a", "b", "c"] },
+    };
+    expect(bookBlockReason("pdm", three)).toBe("The partner or customer books the hackathon.");
+    expect(bookBlockReason("partner", initialSessionGraph)).toBe("Select three solutions first.");
+    expect(bookBlockReason("customer", initialSessionGraph)).toBe("Select three solutions first.");
+    expect(bookBlockReason("pdm", initialSessionGraph)).toBe("The partner or customer books the hackathon.");
+    expect(bookBlockReason("partner", three)).toBeNull();
+    expect(bookBlockReason("customer", three)).toBeNull();
+  });
+
   it("starts the PDM scenario from clean seeded data after a cold customer", () => {
     const fujitsu = applyColdScope(
       initialSessionGraph,
@@ -982,6 +996,28 @@ describe("solution ranking and hackathon booking", () => {
     expect(lookupAccount("heart", "partner").hit).toBe(false);
     expect(lookupAccount("Heartland", "customer").hit).toBe(false);
     expect(lookupAccount("Reply", "customer").hit).toBe(false);
+    expect(lookupAccount("Heartland", "partner")).not.toHaveProperty("publicProfile");
+  });
+
+  it("attaches a public profile only to a Reply miss", () => {
+    const reply = lookupAccount(" reply ", "partner");
+    expect(reply.hit).toBe(false);
+    if (!reply.hit) {
+      expect(reply.publicProfile).toEqual({
+        companyName: "Reply",
+        industry: "Technology",
+        sentence: "A services company. This sentence is public. It is not the business case.",
+      });
+    }
+    const customerReply = lookupAccount("REPLY", "customer");
+    expect(customerReply.hit).toBe(false);
+    if (!customerReply.hit) expect(customerReply.publicProfile?.companyName).toBe("Reply");
+    const other = lookupAccount("Northwind", "partner");
+    expect(other.hit).toBe(false);
+    if (!other.hit) expect(other.publicProfile).toBeNull();
+    const customerHeartland = lookupAccount("Heartland", "customer");
+    expect(customerHeartland.hit).toBe(false);
+    if (!customerHeartland.hit) expect(customerHeartland.publicProfile).toBeNull();
   });
 
   it("enriches Heartland names on a hit and never on a miss", () => {

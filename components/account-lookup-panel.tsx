@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Actor, ColdAttendee, ColdCompany } from "@/lib/seed";
+import type { PublicProfile } from "@/lib/session";
 import {
   coldRoleMatch,
   coldScopeDefaults,
@@ -40,7 +41,7 @@ export function AccountLookupPanel({
   onMiss: (query: string, customerDoor: boolean) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [miss, setMiss] = useState<{ query: string; customerDoor: boolean } | null>(null);
+  const [miss, setMiss] = useState<{ query: string; customerDoor: boolean; publicProfile: PublicProfile | null } | null>(null);
 
   function runLookup(event: FormEvent) {
     event.preventDefault();
@@ -50,7 +51,11 @@ export function AccountLookupPanel({
       onHit();
       return;
     }
-    setMiss({ query: result.query || query.trim(), customerDoor: result.customerDoor });
+    setMiss({
+      query: result.query || query.trim(),
+      customerDoor: result.customerDoor,
+      publicProfile: result.publicProfile,
+    });
   }
 
   function addAccount() {
@@ -81,11 +86,24 @@ export function AccountLookupPanel({
             </p>
           ) : (
             <p className="text-sm leading-6 text-amber-950">
-              No partner match for {miss.query || "that name"}. Add the account below.
+              No partner match for {miss.query || "that name"}.
             </p>
           )}
+          {miss.publicProfile ? (
+            <>
+              <p className="mt-2 text-sm leading-6 text-amber-950">A public profile is the next place to look.</p>
+              <div className="mt-3 rounded-sm border border-black/10 bg-white p-4">
+                <p className="text-sm font-semibold">{miss.publicProfile.companyName}</p>
+                <p className="mt-1 text-sm text-black/70">{miss.publicProfile.industry}</p>
+                <p className="mt-2 text-sm leading-6">{miss.publicProfile.sentence}</p>
+                <p className="mt-3 text-xs text-black/48">Public profile · illustrative · not a live LinkedIn lookup.</p>
+              </div>
+            </>
+          ) : (
+            <p className="mt-2 text-sm leading-6 text-amber-950">No public profile. Add the account.</p>
+          )}
           <Button type="button" className="mt-3" onClick={addAccount}>
-            Can&apos;t find it — add my account
+            {miss.publicProfile ? "Add this account" : "Add the account"}
           </Button>
         </div>
       )}

@@ -23,7 +23,7 @@ function selectIds(graph: typeof initialSessionGraph, ids: string[]) {
 
 describe("walk A/B/C", () => {
   it("Walk A — customer door Reply miss → sample rank → book three", () => {
-    expect(lookupAccount("Reply", "customer")).toEqual({
+    expect(lookupAccount("Reply", "customer")).toMatchObject({
       hit: false,
       query: "Reply",
       customerDoor: true,

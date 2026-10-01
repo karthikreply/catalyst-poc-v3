@@ -229,3 +229,11 @@ export function scopeTelemetry(
 }
 
 export const telemetrySeed = Object.freeze(buildTelemetrySessions());
+
+/** Illustrative booked rate for one pattern. A row counts when the hackathon was booked or the pilot was signed. */
+export function patternBookedSignal(patternName: string): string {
+  const rows = telemetrySeed.filter((row) => row.pattern === patternName);
+  const booked = rows.filter((row) => isBookedOutcome(row.outcome)).length;
+  const percent = rows.length ? Math.round((booked / rows.length) * 100) : 0;
+  return `${patternName} · booked in ${percent}% of sessions · illustrative.`;
+}

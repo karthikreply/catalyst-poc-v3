@@ -765,6 +765,13 @@ export function canBookHackathon(actor: Actor) {
   return actor === "partner" || isCustomerViewer(actor);
 }
 
+/** Why booking is unavailable, or null when the viewer may open the booking form. */
+export function bookBlockReason(actor: Actor, graph: SessionGraph): string | null {
+  if (!canBookHackathon(actor)) return "The partner or customer books the hackathon.";
+  if (graph.ranking.selected.length !== 3) return "Select three solutions first.";
+  return null;
+}
+
 export function bindAnnualValue(graph: SessionGraph): SessionGraph {
   const claims = graph.valueInputs.find((input) => input.id === "claims")?.quantity ?? 0;
   const delay = graph.valueInputs.find((input) => input.id === "delay")?.quantity ?? 0;
@@ -1048,19 +1055,21 @@ export type GoogleStackItem = {
   role: string;
 };
 
+/** Role of each named product in the three-day build. Shared by the stack and the rank chips. */
+export const googleProductRoles: Record<string, string> = {
+  Gemini: "Solution approaches for the three booked rows",
+  "Document AI": "Form and PDF extraction on the customer's documents",
+  "Vertex AI": "Model and evaluation work during the three days",
+  "Vertex AI Search": "Grounded retrieval over claims knowledge",
+  "Cloud Logging": "Audit trail for automated decisions",
+};
+
 /** Narrative Google stack for a booked hackathon: solution products plus Calendar and Meet. */
 export function hackathonGoogleStack(graph: SessionGraph): GoogleStackItem[] {
   if (!graph.hackathon?.booked) return [];
-  const roles: Record<string, string> = {
-    Gemini: "Solution approaches for the three booked rows",
-    "Document AI": "Form and PDF extraction on the customer's documents",
-    "Vertex AI": "Model and evaluation work during the three days",
-    "Vertex AI Search": "Grounded retrieval over claims knowledge",
-    "Cloud Logging": "Audit trail for automated decisions",
-  };
   const items: GoogleStackItem[] = bookedSolutionProducts(graph).map((product) => ({
     product,
-    role: roles[product] ?? "Google Cloud capability used in the three-day build",
+    role: googleProductRoles[product] ?? "Google Cloud capability used in the three-day build",
   }));
   items.push({
     product: "Google Calendar",
@@ -1275,20 +1284,36 @@ export function voteTallies(graph: SessionGraph): Record<string, number> {
   return tallies;
 }
 
+export type PublicProfile = {
+  companyName: "Reply";
+  industry: "Technology";
+  sentence: "A services company. This sentence is public. It is not the business case.";
+};
+
+const replyPublicProfile: PublicProfile = {
+  companyName: "Reply",
+  industry: "Technology",
+  sentence: "A services company. This sentence is public. It is not the business case.",
+};
+
 export type AccountLookupResult =
   | { hit: true; accountName: "Heartland Mutual Insurance" }
-  | { hit: false; query: string; customerDoor: boolean };
+  | { hit: false; query: string; customerDoor: boolean; publicProfile: PublicProfile | null };
+
+function publicProfileFor(normalized: string): PublicProfile | null {
+  return normalized === "reply" ? replyPublicProfile : null;
+}
 
 export function lookupAccount(query: string, actor: Actor): AccountLookupResult {
   const trimmed = query.trim();
   const normalized = trimmed.toLowerCase();
   if (isCustomerViewer(actor)) {
-    return { hit: false, query: trimmed, customerDoor: true };
+    return { hit: false, query: trimmed, customerDoor: true, publicProfile: publicProfileFor(normalized) };
   }
   if (normalized === "heartland" || normalized === "heartland mutual insurance") {
     return { hit: true, accountName: "Heartland Mutual Insurance" };
   }
-  return { hit: false, query: trimmed, customerDoor: false };
+  return { hit: false, query: trimmed, customerDoor: false, publicProfile: publicProfileFor(normalized) };
 }
 
 export const heartlandKnownPeople: Record<string, { role: string }> = {

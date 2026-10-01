@@ -10,6 +10,8 @@ import {
   applyDeliveryMode,
   applyMechanic,
   bookHackathon,
+  castVote,
+  googleProductRoles,
   bookedSolutionPains,
   catalogSolutionById,
   coldScopeDefaults,
@@ -19,6 +21,7 @@ import {
   startSampleRun,
   toggleSelected,
 } from "@/lib/session";
+import { patternBookedSignal } from "@/lib/telemetry";
 
 const useSessionMock = vi.fn();
 
@@ -91,6 +94,8 @@ describe("Rank page", () => {
     expect(markup).toContain("3 of 3 selected");
     expect(markup).toContain("Book the hackathon");
     expect(markup).toContain('href="/artifact"');
+    expect(markup).not.toContain("Select three solutions first.");
+    expect(markup).not.toContain("The partner or customer books the hackathon.");
     expect(markup).not.toContain("Hackathon date");
     expect(markup).toContain("Lock ranking");
 
@@ -404,6 +409,10 @@ describe("Rank page", () => {
     expect(markup).not.toContain('href="/artifact"');
     expect(markup).not.toContain("Hackathon date");
     expect(markup).not.toContain("A PDM does not book it.");
+    expect(markup).toContain("The partner or customer books the hackathon.");
+    const describedBy = markup.match(/aria-describedby="([^"]+)"/)?.[1];
+    expect(describedBy).toBeTruthy();
+    expect(markup).toContain(`id="${describedBy}"`);
   });
 
   it("offers Try it as the primary action once the extraction solution is locked, then swaps after a run", () => {
@@ -463,6 +472,121 @@ describe("Rank page", () => {
     });
     expect(renderToStaticMarkup(<RankPage />)).not.toContain("data-try-card");
     expect(renderToStaticMarkup(<RankPage />)).not.toContain("Try it on sample claims");
+  });
+
+  it("shows votes and evidence on every row, and the program line only for the partner", () => {
+    let graph = castVote(initialSessionGraph, "michelle", "sol-intake-extraction");
+    graph = castVote(graph, "robert", "sol-intake-extraction");
+    graph = {
+      ...graph,
+      solutions: graph.solutions.map((solution) => (
+        solution.id === "sol-handwriting-assist" ? { ...solution, stepId: "shape-the-pilot" } : solution
+      )),
+    };
+    function show(actor: "partner" | "customer") {
+      useSessionMock.mockReturnValue({
+        graph,
+        viewer: { actor, name: actor === "partner" ? "Ravi Menon" : "Dana Reyes", org: "Org" },
+        canEditSession: actor === "partner",
+        moveSolution: vi.fn(),
+        toggleSelected: vi.fn(),
+        castVote: vi.fn(),
+        lockRanking: vi.fn(),
+        unlockRanking: vi.fn(),
+      });
+      return renderToStaticMarkup(<RankPage />);
+    }
+
+    for (const actor of ["partner", "customer"] as const) {
+      const markup = show(actor);
+      expect(markup).toContain("2 votes · Michelle Dorsey, Robert Osei");
+      expect(markup).not.toContain("0 votes");
+      expect(markup).toContain("2 quotes · Michelle Dorsey, Dana Reyes");
+      expect(markup).toContain("3 quotes · Michelle Dorsey, Robert Osei, Alex Chen");
+      expect(markup).not.toContain("No evidence yet.");
+    }
+
+    const partner = show("partner");
+    expect(partner).toContain(patternBookedSignal("Document-heavy intake"));
+    expect(partner).not.toContain('aria-label="Vote ');
+
+    const customer = show("customer");
+    expect(customer).not.toContain("booked in");
+    expect(customer).not.toContain("illustrative.");
+    expect(customer).not.toContain("download");
+    expect(customer).not.toContain("star rating");
+    expect(customer).toContain("Vote Michelle Dorsey for");
+
+    const gemini = partner.slice(partner.indexOf("data-gemini-mark"), partner.indexOf("</svg>", partner.indexOf("data-gemini-mark")));
+    for (const color of ["#4285F4", "#EA4335", "#FBBC05", "#34A853"]) {
+      expect(gemini).toContain(color);
+    }
+    for (const icon of ["lucide-file", "lucide-layers", "lucide-scroll-text"]) {
+      const start = partner.indexOf(icon);
+      const svg = partner.slice(start, partner.indexOf("</svg>", start));
+      expect(svg).not.toContain("#4285F4");
+      expect(svg).not.toContain("#EA4335");
+      expect(svg).not.toContain("#FBBC05");
+      expect(svg).not.toContain("#34A853");
+    }
+    expect(partner).toContain("lucide-file");
+    expect(partner).toContain("lucide-layers");
+    expect(partner).toContain("lucide-scroll-text");
+    for (const product of ["Gemini", "Document AI", "Vertex AI", "Cloud Logging"]) {
+      expect(partner).toContain(googleProductRoles[product].replaceAll("'", "&#x27;"));
+    }
+
+    useSessionMock.mockReturnValue({
+      graph: applyMechanic(initialSessionGraph, "ghost-ledger"),
+      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      canEditSession: true,
+      moveSolution: vi.fn(),
+      toggleSelected: vi.fn(),
+      castVote: vi.fn(),
+      lockRanking: vi.fn(),
+      unlockRanking: vi.fn(),
+    });
+    const ledger = renderToStaticMarkup(<RankPage />);
+    expect(ledger).toContain("lucide-search");
+    expect(ledger).toContain(googleProductRoles["Vertex AI Search"].replaceAll("'", "&#x27;"));
+    const search = ledger.slice(ledger.indexOf("lucide-search"), ledger.indexOf("</svg>", ledger.indexOf("lucide-search")));
+    expect(search).not.toContain("#4285F4");
+  });
+
+  it("omits empty vote and evidence lines, including a cold account with no captures", () => {
+    useSessionMock.mockReturnValue({
+      graph: initialSessionGraph,
+      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      canEditSession: true,
+      moveSolution: vi.fn(),
+      toggleSelected: vi.fn(),
+      castVote: vi.fn(),
+      lockRanking: vi.fn(),
+      unlockRanking: vi.fn(),
+    });
+    const seeded = renderToStaticMarkup(<RankPage />);
+    expect(seeded).toContain("2 quotes · Michelle Dorsey, Dana Reyes");
+    expect(seeded).not.toContain("0 votes");
+
+    const cold = applyColdScope(
+      initialSessionGraph,
+      { name: "Northwind", industry: "Insurance", sizeBand: "Enterprise" },
+      coldScopeDefaults.attendees,
+    );
+    useSessionMock.mockReturnValue({
+      graph: cold,
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Northwind" },
+      canEditSession: true,
+      moveSolution: vi.fn(),
+      toggleSelected: vi.fn(),
+      castVote: vi.fn(),
+      lockRanking: vi.fn(),
+      unlockRanking: vi.fn(),
+    });
+    const markup = renderToStaticMarkup(<RankPage />);
+    expect(markup).not.toContain("0 votes");
+    expect(markup).not.toContain("No evidence yet.");
+    expect(markup).not.toContain("quotes ·");
   });
 });
 
