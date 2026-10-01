@@ -16,12 +16,12 @@ describe("vendor shell routing", () => {
 
   it("marks only the partner workflow as brand-led", () => {
     expect(isBrandFlowPath("/scope", "partner")).toBe(true);
-    expect(isBrandFlowPath("/artifact", "cpm")).toBe(true);
+    expect(isBrandFlowPath("/artifact", "customer")).toBe(true);
     expect(isBrandFlowPath("/pilot-spec", "pdm")).toBe(true);
     expect(isBrandFlowPath("/", "partner")).toBe(false);
     expect(isBrandFlowPath("/funding", "partner")).toBe(true);
     expect(isBrandFlowPath("/funding", "pdm")).toBe(false);
-    expect(isBrandFlowPath("/funding", "cpm")).toBe(false);
+    expect(isBrandFlowPath("/funding", "customer")).toBe(false);
     expect(isBrandFlowPath("/telemetry", "partner")).toBe(false);
     expect(isBrandFlowPath("/sessions", "partner")).toBe(false);
     expect(isBrandFlowPath("/sessions", "pdm")).toBe(false);
@@ -43,31 +43,31 @@ describe("vendor shell routing", () => {
     expect(breadcrumbForPath("/rank", "pdm")).toEqual(["Partner network", "Value sessions", "Rank"]);
     expect(isBrandFlowPath("/rank", "partner")).toBe(true);
     expect(isBrandFlowPath("/try", "partner")).toBe(true);
-    expect(isBrandFlowPath("/try", "cpm")).toBe(true);
+    expect(isBrandFlowPath("/try", "customer")).toBe(true);
     expect(breadcrumbForPath("/try", "partner")).toEqual(["Partner network", "Value sessions", "Try it"]);
-    expect(breadcrumbForPath("/try/", "cpm")).toEqual(["Your engagement", "Value sessions", "Try it"]);
+    expect(breadcrumbForPath("/try/", "customer")).toEqual(["Your engagement", "Value sessions", "Try it"]);
     expect(breadcrumbForPath("/funding", "partner")).toEqual(["Partner network", "Funding"]);
     expect(breadcrumbForPath("/telemetry", "pdm")).toEqual(["Partner network", "Telemetry"]);
     expect(breadcrumbForPath("/sessions", "partner")).toEqual(["Partner network", "My sessions"]);
     expect(breadcrumbForPath("/sessions", "pdm")).toEqual(["Partner network", "My sessions"]);
     expect(breadcrumbForPath("/customer", "partner")).toEqual(["Partner network", "Customer"]);
-    expect(isBrandFlowPath("/customer", "cpm")).toBe(false);
+    expect(isBrandFlowPath("/customer", "customer")).toBe(false);
   });
 
   it("names the customer's engagement on every page and limits the rail", () => {
-    expect(navItemsForActor("cpm").map((item) => [item.label, item.href])).toEqual([
+    expect(navItemsForActor("customer").map((item) => [item.label, item.href])).toEqual([
       ["Dashboard", "/customer"],
       ["Value sessions", "/scope"],
       ["Funding", "/funding"],
     ]);
     expect(navItemsForActor("partner").map((item) => item.label)).toEqual(vendorNavItems.map((item) => item.label));
-    expect(navItemsForActor("cpm").some((item) => item.href === "/sessions" || item.label === "My sessions")).toBe(false);
+    expect(navItemsForActor("customer").some((item) => item.href === "/sessions" || item.label === "My sessions")).toBe(false);
     expect(navItemsForActor("partner").find((item) => item.label === "My sessions")?.href).toBe("/sessions");
     expect(navItemsForActor("pdm").find((item) => item.label === "Dashboard")?.href).toBe("/");
     for (const path of ["/", "/customer", "/scope", "/run", "/rank", "/artifact", "/funding"]) {
-      expect(breadcrumbForPath(path, "cpm")[0]).toBe("Your engagement");
+      expect(breadcrumbForPath(path, "customer")[0]).toBe("Your engagement");
     }
-    expect(breadcrumbForPath("/funding", "cpm")).toEqual(["Your engagement", "Funding"]);
-    expect(breadcrumbForPath("/run", "cpm")).toEqual(["Your engagement", "Value sessions", "Run"]);
+    expect(breadcrumbForPath("/funding", "customer")).toEqual(["Your engagement", "Funding"]);
+    expect(breadcrumbForPath("/run", "customer")).toEqual(["Your engagement", "Value sessions", "Run"]);
   });
 });

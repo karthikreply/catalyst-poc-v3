@@ -4,11 +4,12 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { pilotReadinessCopy } from "@/lib/pilot-readiness";
+import { pilotReadinessItems } from "@/lib/pilot-readiness";
 import { sampleClaims } from "@/lib/sample-claims";
 import { initialSessionGraph, type Actor, type SessionGraph } from "@/lib/seed";
 import {
   applyDeliveryMode,
+  bookHackathon,
   lockRanking,
   markSampleClaim,
   moveSolution,
@@ -35,7 +36,7 @@ function lockExtraction(graph = initialSessionGraph) {
 }
 
 function sessionValue(graph: SessionGraph, actor: Actor) {
-  const name = actor === "pdm" ? "Priya Raghavan" : actor === "partner" ? "Ravi Menon" : "Marcus Hale";
+  const name = actor === "pdm" ? "Priya Raghavan" : actor === "partner" ? "Ravi Menon" : "Dana Reyes";
   return {
     graph,
     viewer: { actor, name, org: "CDW" },
@@ -48,7 +49,7 @@ function sessionValue(graph: SessionGraph, actor: Actor) {
 
 function Harness({ initial, actor = "partner" }: { initial: SessionGraph; actor?: Actor }) {
   const [graph, setGraph] = useState(initial);
-  const name = actor === "pdm" ? "Priya Raghavan" : actor === "partner" ? "Ravi Menon" : "Marcus Hale";
+  const name = actor === "pdm" ? "Priya Raghavan" : actor === "partner" ? "Ravi Menon" : "Dana Reyes";
   useSessionMock.mockReturnValue({
     graph,
     viewer: { actor, name, org: "CDW" },
@@ -149,14 +150,14 @@ describe("Try it", () => {
 
   it("keeps a read-only customer from running or marking, and still shows the book link", () => {
     const locked = lockExtraction();
-    useSessionMock.mockReturnValue(sessionValue(locked, "cpm"));
+    useSessionMock.mockReturnValue(sessionValue(locked, "customer"));
     const ready = renderToStaticMarkup(<TryPage />);
     expect(ready).toContain("Try it on eight sample claims");
     expect(ready).not.toContain("Run on the sample claims");
     expect(ready).toContain('href="/artifact"');
 
     const started = startSampleRun(locked, "partner", "Ravi Menon", at);
-    useSessionMock.mockReturnValue(sessionValue(started, "cpm"));
+    useSessionMock.mockReturnValue(sessionValue(started, "customer"));
     const review = renderToStaticMarkup(<TryPage />);
     expect(review).toContain("Marcus Webb");
     expect(review).toContain("What came back");
@@ -178,7 +179,7 @@ describe("Try it", () => {
     expect(markup).toContain("Reviewed 8 of 8 · 1 need a fix");
     expect(markup).toContain("Where it broke");
     expect(markup).toContain("Claim 3 · Date of loss");
-    expect(markup).toContain(pilotReadinessCopy);
+    for (const item of pilotReadinessItems) expect(markup).toContain(item);
     expect(markup).toContain("Before the real hackathon");
     expect(markup).not.toContain("Handwritten margin note");
     expect(markup).not.toContain("Looks right");
@@ -216,5 +217,39 @@ describe("Try it", () => {
     expect(markup).not.toContain("Run on the sample claims");
     expect(markup).not.toContain("sandbox");
     expect(markup).not.toContain("AI-powered");
+  });
+
+  it("previews day two after booking and never offers a book action", () => {
+    const draft = {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Dana Reyes",
+      question: "Can we prove the three?",
+    };
+    const booked = bookHackathon(lockExtraction(), draft);
+    useSessionMock.mockReturnValue(sessionValue(booked, "partner"));
+    const ready = renderToStaticMarkup(<TryPage />);
+    expect(ready).toContain("Preview day two on eight sample claims");
+    expect(ready).toContain("A preview of day two. Nothing here is measured, and none of it goes into your business case.");
+    expect(ready).not.toContain("Book the hackathon");
+    expect(ready).toContain("Illustrative run on made-up claims. The real hackathon uses your own documents.");
+
+    let reviewed = startSampleRun(booked, "partner", "Ravi Menon", at);
+    for (const claim of sampleClaims) {
+      const fix = claim.id === "claim-3";
+      reviewed = markSampleClaim(reviewed, "partner", claim.id, fix ? "fix" : "right", fix ? ["dateOfLoss"] : [], "Ravi Menon", at, true);
+    }
+    useSessionMock.mockReturnValue(sessionValue(reviewed, "customer"));
+    const summary = renderToStaticMarkup(<TryPage />);
+    expect(summary).toContain("Back to the pilot spec");
+    expect(summary).toContain('href="/pilot-spec"');
+    expect(summary).toContain("Before the hackathon on 2026-10-14");
+    for (const item of pilotReadinessItems) expect(summary).toContain(item);
+    expect(summary).not.toContain("Book the hackathon");
+
+    const unavailable = bookHackathon(lockExtraction(moveSolution(initialSessionGraph, "sol-intake-extraction", "down")), draft);
+    useSessionMock.mockReturnValue(sessionValue(unavailable, "partner"));
+    expect(renderToStaticMarkup(<TryPage />)).not.toContain("Book the hackathon");
   });
 });

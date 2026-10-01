@@ -16,7 +16,7 @@ import {
   prmBadge,
 } from "@/lib/seed/accountRecord";
 import type { ColdAttendee, PartnerNote } from "@/lib/seed";
-import {
+import { isCustomerViewer,
   canViewPartnerScope,
   claimsPayoffCopy,
   coldScopeDefaults,
@@ -83,7 +83,7 @@ export default function ScopePage() {
   const coldGaps = missingColdRoles(graph);
   const scopeComplete = mode === "seeded" ? seededComplete : coldComplete;
   const missingAttendeeCount = Math.max(0, 3 - completeAttendees.length);
-  const scopeEditable = canEditSession || viewer.actor === "cpm";
+  const scopeEditable = canEditSession || isCustomerViewer(viewer.actor);
   const [seededNameCheck, setSeededNameCheck] = useState("");
   const seededEnrichment = seededNameCheck.trim()
     ? enrichAttendeeName(seededNameCheck, true)
@@ -191,7 +191,7 @@ export default function ScopePage() {
     );
   }
 
-  if (viewer.actor === "cpm") {
+  if (isCustomerViewer(viewer.actor)) {
     return (
       <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">

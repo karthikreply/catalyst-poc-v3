@@ -10,7 +10,7 @@ import { UnavailableControl } from "@/components/unavailable-control";
 import { useSession } from "@/components/session-provider";
 import { withBrandPeople, type Brand } from "@/lib/brands";
 import { patterns, type CloseStyle, type Delivery, type Mechanic, type SessionGraph } from "@/lib/seed";
-import { agendaForSession, customerFormatLabels, customerHasAccount, missingColdRoles, pdmPartnerInvitationCopy, preworkForMechanic } from "@/lib/session";
+import { isCustomerViewer, agendaForSession, customerFormatLabels, customerHasAccount, missingColdRoles, pdmPartnerInvitationCopy, preworkForMechanic } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 const optionCardClass = "h-full rounded-sm border p-3 text-left text-sm disabled:cursor-not-allowed disabled:opacity-60";
@@ -19,7 +19,7 @@ const selectedOptionClass = "border-[var(--brand-accent)] bg-[color-mix(in_srgb,
 export default function PlanPage() {
   const { graph, brand, viewer, setDelivery, setMechanic, setCloseStyle, canEditSession } = useSession();
   const [copied, setCopied] = useState<"facilitated" | "self-service" | "pdm" | null>(null);
-  if (viewer.actor === "cpm") {
+  if (isCustomerViewer(viewer.actor)) {
     return customerHasAccount(viewer.actor, graph)
       ? <CustomerBriefing graph={graph} brand={brand} />
       : <CustomerAccountPending message="Add the company before the session" />;

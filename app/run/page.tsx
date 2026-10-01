@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useSession } from "@/components/session-provider";
 import { ValueSprintPanel } from "@/components/value-sprint-panel";
 import { nextQuestionSuggestion } from "@/lib/facilitation";
-import { agendaForSession, handoffLabel } from "@/lib/session";
+import { isCustomerViewer, agendaForSession, handoffLabel } from "@/lib/session";
 import type { Capture, Handoff, HandoffKind } from "@/lib/seed";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +28,7 @@ export default function RunPage() {
   const [suggesting, setSuggesting] = useState(false);
   const [suggestion, setSuggestion] = useState<{ stepId: string; text: string } | null>(null);
   const selfService = graph.session.delivery === "self-service";
-  const customer = viewer.actor === "cpm";
+  const customer = isCustomerViewer(viewer.actor);
   const showHandoff = viewer.actor === "partner" && activeStep.id === "owner-and-ask";
   const selectedPerson = capturePeople.includes(person) ? person : capturePeople[0] ?? "Participant";
   const capturePerson = selfService ? capturePeople[0] ?? "Respondent" : selectedPerson;
@@ -58,7 +58,7 @@ export default function RunPage() {
       {selfService && (
         <p className="border-b border-black/10 bg-[#fafaf8] px-5 py-2 text-xs text-black/55 lg:px-8">Customer self-service — no partner facilitator present. Output is a qualification-grade business case.</p>
       )}
-      {viewer.actor === "cpm" && !canEditSession && (
+      {isCustomerViewer(viewer.actor) && !canEditSession && (
         <p className="border-b border-black/10 bg-[#fafaf8] px-5 py-2 text-xs text-black/55 lg:px-8">Historical session record — the platform vendor sees completed evidence shared by the partner, not live session activity.</p>
       )}
 

@@ -1,4 +1,4 @@
-export type Actor = "pdm" | "partner" | "cpm";
+export type Actor = "pdm" | "partner" | "customer";
 export type Delivery = "facilitated" | "google-facilitated" | "self-service";
 export type Mechanic = "value-sprint" | "ghost-ledger";
 export type CloseStyle = "owner-and-ask" | "board-slide";

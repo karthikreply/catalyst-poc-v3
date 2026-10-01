@@ -1,4 +1,5 @@
 import type { Actor } from "./seed";
+import { isCustomerViewer } from "./session";
 
 export const vendorNavItems = [
   { label: "Dashboard", href: "/", illustrative: false },
@@ -18,7 +19,7 @@ export type VendorNavItem = {
 
 /** Partner and PDM keep the program rail. The customer sees this engagement only. */
 export function navItemsForActor(actor: Actor): VendorNavItem[] {
-  if (actor !== "cpm") return vendorNavItems.map((item) => ({ ...item }));
+  if (!isCustomerViewer(actor)) return vendorNavItems.map((item) => ({ ...item }));
   return [
     { label: "Dashboard", href: "/customer", illustrative: false },
     { label: "Value sessions", href: "/scope", illustrative: false },
@@ -46,7 +47,7 @@ export function mergesSessionHeader(pathname: string) {
 }
 
 export function breadcrumbForPath(pathname: string, actor: Actor) {
-  const root = actor === "cpm" ? "Your engagement" : "Partner network";
+  const root = isCustomerViewer(actor) ? "Your engagement" : "Partner network";
   if (pathname === "/") return [root, "Dashboard"];
   if (pathname.startsWith("/sessions")) return [root, "My sessions"];
   if (pathname.startsWith("/funding")) return [root, "Funding"];

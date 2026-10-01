@@ -246,7 +246,7 @@ describe("agenda step navigation", () => {
   it("still moves the agenda on a read-only session", () => {
     const setActiveStep = mockAgendaAt("constraints", vi.fn(), {
       canEditSession: false,
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Platform vendor" },
     });
     render(<RunPage />);
 
@@ -266,7 +266,7 @@ describe("agenda step navigation", () => {
     useSessionMock.mockReturnValue({
       graph,
       brand: { partnerName: "CDW" },
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Platform vendor" },
       canEditSession: true,
       addCapture: vi.fn(),
       updateCapture: vi.fn(),
@@ -320,7 +320,7 @@ describe("agenda step navigation", () => {
         session: { ...initialSessionGraph.session, delivery: "self-service" },
       },
       brand: { partnerName: "CDW" },
-      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      viewer: { actor: "customer", name: "Dana Reyes", org: "Platform vendor" },
       canEditSession: true,
       addCapture: vi.fn(),
       updateCapture: vi.fn(),
@@ -367,7 +367,7 @@ describe("handoff controls", () => {
       },
       brand: { partnerName: "CDW" },
       viewer,
-      canEditSession: viewer.actor !== "cpm",
+      canEditSession: viewer.actor !== "customer",
       addCapture: vi.fn(),
       updateCapture: vi.fn(),
       saveSessionOutcome: vi.fn(),
@@ -404,7 +404,7 @@ describe("handoff controls", () => {
   });
 
   it.each([
-    { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+    { actor: "customer", name: "Dana Reyes", org: "Platform vendor" },
     { actor: "pdm", name: "Priya Raghavan", org: "Google" },
   ])("never shows the controls to the $actor", (viewer) => {
     mockStep("owner-and-ask", viewer);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession } from "@/components/session-provider";
-import { hasCompleteValueInputs } from "@/lib/session";
+import { isCustomerViewer, hasCompleteValueInputs } from "@/lib/session";
 import { calculateDailyValue, formatCurrency } from "@/lib/value";
 
 export function ValueSprintPanel() {
@@ -14,7 +14,7 @@ export function ValueSprintPanel() {
     ? calculateDailyValue(claims.quantity!, delay.quantity!, handling.quantity!)
     : null;
   const selfService = graph.session.delivery === "self-service";
-  const customer = viewer.actor === "cpm";
+  const customer = isCustomerViewer(viewer.actor);
   const attendeeNames = new Set(graph.attendees.map((attendee) => attendee.name));
   const InputRow = selfService ? "div" : "label";
 

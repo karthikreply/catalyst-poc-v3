@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { useSession } from "@/components/session-provider";
+import { isCustomerViewer } from "@/lib/session";
 import { sessionsForProfile } from "@/lib/planned-sessions";
 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -24,7 +25,7 @@ function plannedCount(count: number) {
 export default function SessionsPage() {
   const { graph, viewer, hydrated } = useSession();
   const router = useRouter();
-  const customerViewer = viewer.actor === "cpm";
+  const customerViewer = isCustomerViewer(viewer.actor);
 
   useEffect(() => {
     if (hydrated && customerViewer) router.replace("/customer");

@@ -66,7 +66,7 @@ function SessionActionsProbe() {
   );
 }
 
-function renderForActor(actor: "pdm" | "partner" | "cpm", graph = initialSessionGraph) {
+function renderForActor(actor: "pdm" | "partner" | "customer", graph = initialSessionGraph) {
   localStorage.setItem("catalyst-session-graph-v4", JSON.stringify(graph));
   sessionStorage.setItem("catalyst-viewer-actor", actor);
   render(
@@ -83,7 +83,7 @@ function SamplePersistProbe() {
       <output aria-label="sample-verdict">{graph.sampleRun?.marks["claim-1"]?.verdict ?? "none"}</output>
       <button type="button" onClick={() => startSampleRun()}>Start sample</button>
       <button type="button" onClick={() => markSampleClaim("claim-1", "right", [])}>Mark sample claim</button>
-      <button type="button" onClick={() => setActor("cpm")}>Switch to customer</button>
+      <button type="button" onClick={() => setActor("customer")}>Switch to customer</button>
     </>
   );
 }
@@ -101,8 +101,8 @@ describe("SessionProvider action permissions", () => {
   });
 
   it("does not save partner notes or update confirmers for CPM", async () => {
-    renderForActor("cpm");
-    await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent("cpm"));
+    renderForActor("customer");
+    await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent("customer"));
 
     fireEvent.click(screen.getByRole("button", { name: "Save note" }));
     fireEvent.click(screen.getByRole("button", { name: "Update confirmer" }));
@@ -140,8 +140,8 @@ describe("SessionProvider action permissions", () => {
   });
 
   it("moves the agenda for a read-only customer but drops value edits", async () => {
-    renderForActor("cpm");
-    await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent("cpm"));
+    renderForActor("customer");
+    await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent("customer"));
 
     expect(screen.getByLabelText("can-edit")).toHaveTextContent("false");
     fireEvent.click(screen.getByRole("button", { name: "Go to shape" }));
@@ -152,7 +152,7 @@ describe("SessionProvider action permissions", () => {
   });
 
   it("lets a self-service customer edit values", async () => {
-    renderForActor("cpm", applyDeliveryMode(initialSessionGraph, "self-service"));
+    renderForActor("customer", applyDeliveryMode(initialSessionGraph, "self-service"));
     await waitFor(() => expect(screen.getByLabelText("can-edit")).toHaveTextContent("true"));
 
     fireEvent.click(screen.getByRole("button", { name: "Set claims 275" }));
@@ -170,7 +170,7 @@ describe("SessionProvider action permissions", () => {
           <output aria-label="mechanic">{graph.session.mechanic}</output>
           <output aria-label="account">{graph.session.customerName}</output>
           <button type="button" onClick={() => setCustomerDoor(true)}>Open customer door</button>
-          <button type="button" onClick={() => setActor("cpm")}>View as customer</button>
+          <button type="button" onClick={() => setActor("customer")}>View as customer</button>
           <button type="button" onClick={() => setActor("partner")}>View as partner</button>
           <button type="button" onClick={() => setActor("pdm")}>View as pdm</button>
         </>
@@ -235,8 +235,8 @@ describe("SessionProvider action permissions", () => {
   });
 
   it("does not apply exact claims for CPM", async () => {
-    renderForActor("cpm");
-    await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent("cpm"));
+    renderForActor("customer");
+    await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent("customer"));
 
     fireEvent.click(screen.getByRole("button", { name: "Select exact" }));
     fireEvent.click(screen.getByRole("button", { name: "Set exact claims" }));
@@ -256,7 +256,7 @@ describe("SessionProvider action permissions", () => {
       question: "Can we prove the three?",
     });
 
-    it.each(["partner", "cpm"] as const)("lets the %s set and replace the pilot pick", async (actor) => {
+    it.each(["partner", "customer"] as const)("lets the %s set and replace the pilot pick", async (actor) => {
       renderForActor(actor, booked);
       await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent(actor));
       expect(screen.getByLabelText("pilot-pick")).toHaveTextContent("none");
@@ -298,7 +298,7 @@ describe("SessionProvider action permissions", () => {
       expect(screen.getByLabelText("handoff")).toHaveTextContent("daf");
     });
 
-    it.each(["cpm", "pdm"] as const)("does not write for the %s", async (actor) => {
+    it.each(["customer", "pdm"] as const)("does not write for the %s", async (actor) => {
       renderForActor(actor);
       await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent(actor));
 
@@ -335,20 +335,35 @@ describe("SessionProvider action permissions", () => {
     for (const pathname of ["/customer", "/artifact", "/rank"]) {
       shellNav.pathname = pathname;
       shellNav.push.mockClear();
-      sessionStorage.setItem("catalyst-viewer-actor", "cpm");
+      sessionStorage.setItem("catalyst-viewer-actor", "customer");
       localStorage.setItem(GRAPH_KEY, JSON.stringify(initialSessionGraph));
       const view = render(
         <SessionProvider>
           <AppShell><p>body</p></AppShell>
         </SessionProvider>,
       );
-      await waitFor(() => expect(view.getByLabelText("Viewing as")).toHaveValue("cpm"));
+      await waitFor(() => expect(view.getByLabelText("Viewing as")).toHaveValue("customer"));
       expect(shellNav.push).not.toHaveBeenCalled();
-      expect(sessionStorage.getItem("catalyst-viewer-actor")).toBe("cpm");
+      expect(sessionStorage.getItem("catalyst-viewer-actor")).toBe("customer");
       expect(view.queryByText("My sessions")).toBeNull();
       expect(view.getAllByText("Your engagement").length).toBeGreaterThan(0);
       expect(view.getByRole("link", { name: /Partner network/ })).toHaveAttribute("href", "/customer");
       view.unmount();
     }
+  });
+
+  it("migrates a saved customer actor", async () => {
+    shellNav.pathname = "/customer";
+    sessionStorage.setItem("catalyst-viewer-actor", "c\u0070m");
+    localStorage.setItem(GRAPH_KEY, JSON.stringify(initialSessionGraph));
+    const view = render(
+      <SessionProvider>
+        <AppShell><p>body</p></AppShell>
+      </SessionProvider>,
+    );
+    await waitFor(() => expect(view.getByLabelText("Viewing as")).toHaveValue("customer"));
+    expect(sessionStorage.getItem("catalyst-viewer-actor")).toBe("customer");
+    expect(view.getByRole("option", { name: "Dana Reyes · customer" })).toBeTruthy();
+    view.unmount();
   });
 });

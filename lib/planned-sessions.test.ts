@@ -124,6 +124,6 @@ describe("sessionsForProfile", () => {
       "Northwind Benefits",
       "Lakeshore Health",
     ]);
-    expect(sessionsForProfile("cpm", initialSessionGraph)).toEqual([]);
+    expect(sessionsForProfile("customer", initialSessionGraph)).toEqual([]);
   });
 });

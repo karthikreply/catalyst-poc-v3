@@ -7,7 +7,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { HackathonThreeDays } from "@/components/hackathon-three-days";
 import { WhatTheThreeDaysWillBe } from "@/components/what-the-three-days-will-be";
 import { useSession } from "@/components/session-provider";
-import {
+import { isCustomerViewer,
   bookedSolutionTitles,
   canBookHackathon,
   latestStepCapture,
@@ -51,12 +51,12 @@ export default function RankPage() {
   const coldSample = graph.session.scopeMode === "cold";
   const tallies = voteTallies(graph);
   const canSelectMore = selectedCount < 3;
-  const canSelect = canEditSession || viewer.actor === "cpm";
+  const canSelect = canEditSession || isCustomerViewer(viewer.actor);
   const canReorder = canEditSession;
   const mayBook = canBookHackathon(viewer.actor);
   const showTryCard = showsTryItCard(graph);
   const tried = sampleRunHasStarted(graph);
-  const customerViewer = viewer.actor === "cpm";
+  const customerViewer = isCustomerViewer(viewer.actor);
   const latestCapture = customerViewer ? latestStepCapture(graph) : null;
   const topThreeTitles = Array.isArray(graph.ranking.selected) && graph.ranking.selected.length
     ? selected.map((solution) => solution.title)
@@ -157,7 +157,7 @@ export default function RankPage() {
             </p>
           )}
 
-          {viewer.actor === "cpm" && (
+          {isCustomerViewer(viewer.actor) && (
             <p className="mt-4 text-sm text-black/58">Votes are visible. The three you select are what get booked.</p>
           )}
 
@@ -195,7 +195,7 @@ export default function RankPage() {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-semibold">{solution.title}</p>
-                      {viewer.actor === "cpm" && (
+                      {isCustomerViewer(viewer.actor) && (
                         <span className="text-xs text-black/48">{tallies[solution.id] ?? 0} votes</span>
                       )}
                     </div>
@@ -213,7 +213,7 @@ export default function RankPage() {
                         ))}
                       </ul>
                     )}
-                    {viewer.actor === "cpm" && (
+                    {isCustomerViewer(viewer.actor) && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {graph.attendees.filter((person) => person.attendance === "attending").map((person) => (
                           <Button

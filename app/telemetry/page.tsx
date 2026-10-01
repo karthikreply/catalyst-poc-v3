@@ -8,7 +8,7 @@ import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useSession } from "@/components/session-provider";
 import { patterns } from "@/lib/seed";
-import { hasCompleteCostComponents, hasCompleteValueInputs, liveSampleRunFlag } from "@/lib/session";
+import { isCustomerViewer, hasCompleteCostComponents, hasCompleteValueInputs, liveSampleRunFlag } from "@/lib/session";
 import {
   canViewOpportunityDetail,
   isBookedOutcome,
@@ -64,7 +64,7 @@ export default function TelemetryPage() {
   const router = useRouter();
   const [detail, setDetail] = useState(false);
   const showOpportunity = canViewOpportunityDetail(viewer.actor, detail);
-  const customerViewer = viewer.actor === "cpm";
+  const customerViewer = isCustomerViewer(viewer.actor);
 
   useEffect(() => {
     // Telemetry is program-level. The customer sees this engagement only.

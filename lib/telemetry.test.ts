@@ -53,7 +53,7 @@ describe("telemetryBenchmarks", () => {
     expect(scopeTelemetry(rows, { actor: "pdm", partnerName: "SoftwareOne" }).map((item) => item.partner)).toEqual(
       expect.arrayContaining(["CDW", "SoftwareOne", "Insight", "SHI"]),
     );
-    expect(scopeTelemetry(rows, { actor: "cpm", partnerName: "SoftwareOne" }).map((item) => item.partner)).toEqual(
+    expect(scopeTelemetry(rows, { actor: "customer", partnerName: "SoftwareOne" }).map((item) => item.partner)).toEqual(
       expect.arrayContaining(["CDW", "SoftwareOne", "Insight", "SHI"]),
     );
   });
@@ -62,7 +62,7 @@ describe("telemetryBenchmarks", () => {
     expect(canViewOpportunityDetail("partner", true)).toBe(true);
     expect(canViewOpportunityDetail("partner", false)).toBe(false);
     expect(canViewOpportunityDetail("pdm", true)).toBe(false);
-    expect(canViewOpportunityDetail("cpm", true)).toBe(false);
+    expect(canViewOpportunityDetail("customer", true)).toBe(false);
   });
 
   it("gives the CDW cohort credible scope and funding drop-off", () => {

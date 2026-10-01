@@ -29,7 +29,7 @@ function frame(actor: string, graph = initialSessionGraph) {
 describe("customer chrome", () => {
   it("names the partner of record and hides the brand switcher", () => {
     state.pathname = "/plan";
-    const markup = frame("cpm");
+    const markup = frame("customer");
     expect(markup).toContain("CDW");
     expect(markup).toContain("Your engagement");
     expect(markup).not.toContain("Partner brand");
@@ -44,7 +44,7 @@ describe("customer chrome", () => {
       { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" },
       coldScopeDefaults.attendees,
     );
-    const markup = frame("cpm", account);
+    const markup = frame("customer", account);
     expect(markup).toContain("Reply · value session");
     expect(markup).toContain("Prioritize my use cases");
     expect(markup).not.toContain("Partner-facilitated");

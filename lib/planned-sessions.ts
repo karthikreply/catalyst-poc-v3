@@ -1,5 +1,6 @@
 import { brands } from "./brands";
 import type { Actor, SessionGraph } from "./seed";
+import { isCustomerViewer } from "./session";
 
 export type ProfileSessionStage = "scoped" | "planned" | "in session" | "ranked" | "hackathon booked";
 
@@ -97,7 +98,7 @@ function illustrativeRows(rows: IllustrativeSession[], partner: string, liveAcco
 
 /** Sessions for the signed-in profile. The customer has no program list. */
 export function sessionsForProfile(actor: Actor, graph: SessionGraph): ProfileSession[] {
-  if (actor === "cpm") return [];
+  if (isCustomerViewer(actor)) return [];
   const live = liveSession(graph);
   const partner = partnerNameFor(graph);
   const illustrative = actor === "partner"
