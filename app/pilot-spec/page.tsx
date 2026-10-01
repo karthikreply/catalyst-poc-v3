@@ -8,10 +8,10 @@ import { CustomerAccountPending } from "@/components/customer-account-pending";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useSession } from "@/components/session-provider";
 import { UnavailableControl } from "@/components/unavailable-control";
-import { ThreeDayShapeList } from "@/components/what-the-three-days-will-be";
+import { SolutionProductList, ThreeDayShapeList } from "@/components/what-the-three-days-will-be";
 import { pilotReadinessItems } from "@/lib/pilot-readiness";
 import { patterns, type Actor, type SessionGraph } from "@/lib/seed";
-import { canFlagReferenceStory, isCustomerViewer, pilotNextStepCopy, pilotScopeLine, pilotSpecUseCase, sampleRunEntryReady, sampleRunStatusLabel, sessionHasNamedCompany, showsSampleRunLink } from "@/lib/session";
+import { canBookHackathon, canFlagReferenceStory, catalogSolutionById, hackathonDaysLabel, isCustomerViewer, isSessionReadOnly, pilotNextStepCopy, pilotPickTitle, pilotScopeLine, pilotSpecUseCase, sampleRunEntryReady, sampleRunStatusLabel, sessionHasNamedCompany, showcaseLabel, showsSampleRunLink } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 const enableList = `# Enable list — customer cloud account
@@ -46,6 +46,54 @@ function SampleRunEntry({ graph, actor }: { graph: SessionGraph; actor: Actor })
     return <p className="mt-1 text-sm text-black/70">{sampleRunStatusLabel(graph)}</p>;
   }
   return null;
+}
+
+function YourHackathon({ graph, actor }: { graph: SessionGraph; actor: Actor }) {
+  const booking = graph.hackathon!;
+  const solutions = booking.solutionIds.flatMap((id) => {
+    const solution = catalogSolutionById(id, graph);
+    return solution ? [solution] : [];
+  });
+  const pick = pilotPickTitle(graph);
+  const mayPick = canBookHackathon(actor) && !isSessionReadOnly(actor, graph);
+  return (
+    <section className="rounded-sm border border-black/10 bg-white p-6" aria-labelledby="your-hackathon">
+      <h2 id="your-hackathon" className="text-lg font-semibold">Your hackathon</h2>
+      <p className="mt-2 text-sm text-black/70">
+        {hackathonDaysLabel(booking.date)}
+        {booking.showcaseAt ? ` · Showcase ${showcaseLabel(booking.showcaseAt)}` : ""}
+      </p>
+      <p className="mt-3 max-w-2xl text-sm leading-6">{booking.question}</p>
+      <dl className="mt-4 grid gap-px overflow-hidden rounded-sm border border-black/10 bg-black/10 sm:grid-cols-3">
+        {[
+          ["Google facilitator", booking.googleFacilitator],
+          ["Partner specialist", booking.partnerSpecialist],
+          ["Customer owner", booking.customerOwner],
+        ].map(([term, detail]) => (
+          <div key={term} className="bg-white p-4"><dt className="text-xs font-medium text-black/45">{term}</dt><dd className="mt-1 text-sm">{detail}</dd></div>
+        ))}
+      </dl>
+      <ul className="mt-5 divide-y divide-black/10 border-y border-black/10">
+        {solutions.map((solution) => (
+          <li key={solution.id} className="py-3">
+            <p className="text-sm font-semibold">{solution.title}</p>
+            <SolutionProductList title={solution.title} products={solution.products} />
+          </li>
+        ))}
+      </ul>
+      <h3 id="pilot-spec-three-days" className="mt-5 text-base font-semibold">What the three days will be.</h3>
+      <ThreeDayShapeList
+        labelledBy="pilot-spec-three-days"
+        afterDay={{ "Day 2": <SampleRunEntry graph={graph} actor={actor} /> }}
+      />
+      <p className="mt-5 text-sm">
+        {pick ? <><span className="font-semibold">Pilot:</span> {pick}</> : "Pilot not yet chosen."}{" "}
+        <Link href="/artifact" className="underline underline-offset-2">
+          {!pick && mayPick ? "Choose on the business case" : "Open business case"}
+        </Link>
+      </p>
+    </section>
+  );
 }
 
 export default function PilotSpecPage() {
@@ -139,12 +187,18 @@ export default function PilotSpecPage() {
           <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-amber-800">
             {pilotReadinessItems.map((item) => <li key={item}>{item}</li>)}
           </ul>
-          <h3 id="pilot-spec-three-days" className="mt-6 text-base font-semibold">What the three days will be.</h3>
-          <ThreeDayShapeList
-            labelledBy="pilot-spec-three-days"
-            afterDay={{ "Day 2": <SampleRunEntry graph={graph} actor={viewer.actor} /> }}
-          />
+          {!graph.hackathon?.booked && (
+            <>
+              <h3 id="pilot-spec-three-days" className="mt-6 text-base font-semibold">What the three days will be.</h3>
+              <ThreeDayShapeList
+                labelledBy="pilot-spec-three-days"
+                afterDay={{ "Day 2": <SampleRunEntry graph={graph} actor={viewer.actor} /> }}
+              />
+            </>
+          )}
         </section>
+
+        {graph.hackathon?.booked && <YourHackathon graph={graph} actor={viewer.actor} />}
 
         {canFlagReferenceStory(viewer.actor) && (
           <section className="rounded-sm border border-black/10 bg-white p-6">

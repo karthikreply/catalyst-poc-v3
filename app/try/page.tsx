@@ -241,9 +241,15 @@ export default function TryPage() {
   }
 
   function go(next: number) {
+    const complete = sampleRunTallies(run?.marks ?? {}).reviewed >= sampleClaims.length;
+    if (next >= sampleClaims.length && complete) {
+      setEditingFix(false);
+      setBrowsing(false);
+      return;
+    }
     setEditingFix(false);
     if (run?.status === "reviewed") setBrowsing(true);
-    setSamplePosition(next);
+    setSamplePosition(Math.max(0, Math.min(sampleClaims.length - 1, next)));
   }
 
   function reviewAnswers() {
@@ -338,8 +344,8 @@ export default function TryPage() {
             </div>
           )}
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button type="button" variant="outline" onClick={() => go(Math.max(0, index - 1))}>Previous</Button>
-            <Button type="button" variant="outline" onClick={() => go(Math.min(sampleClaims.length - 1, index + 1))}>Next</Button>
+            <Button type="button" variant="outline" onClick={() => go(index - 1)}>Previous</Button>
+            <Button type="button" variant="outline" onClick={() => go(index + 1)}>Next</Button>
             <BookHackathon />
           </div>
         </>
