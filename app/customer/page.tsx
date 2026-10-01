@@ -6,7 +6,15 @@ import { ArrowRight, CalendarDays, FileText, BadgeDollarSign, ListOrdered, Hourg
 import { UnavailableControl } from "@/components/unavailable-control";
 import { useSession } from "@/components/session-provider";
 import type { Mechanic } from "@/lib/seed";
-import { customerFormatLabels, customerHomeSummary, googleCalendarComposeUrl } from "@/lib/session";
+import {
+  agendaForSession,
+  customerFormatLabels,
+  customerHasAccount,
+  customerHomeSummary,
+  googleCalendarComposeUrl,
+  handoffLabel,
+  isSessionReadOnly,
+} from "@/lib/session";
 import { formatCurrency } from "@/lib/value";
 
 const formatCards: { mechanic: Mechanic; body: string; icon: typeof ListOrdered }[] = [
@@ -17,8 +25,12 @@ const formatCards: { mechanic: Mechanic; body: string; icon: typeof ListOrdered 
 export default function CustomerHomePage() {
   const { graph, brand, viewer, chooseCustomerFormat } = useSession();
   const summary = customerHomeSummary(graph, brand.partnerName);
+  const hasAccount = customerHasAccount(viewer.actor, graph);
   const booked = Boolean(graph.hackathon?.booked);
   const scheduleUrl = booked ? googleCalendarComposeUrl(graph, brand.partnerName) : "";
+  // Same rule as Run: a customer on a partner-led session attends it rather than starting their own.
+  const attending = isSessionReadOnly(viewer.actor, graph);
+  const handoff = handoffLabel(graph.session.handoff);
 
   if (viewer.actor !== "cpm") {
     return (
@@ -28,6 +40,34 @@ export default function CustomerHomePage() {
           This page is the customer&apos;s view of their engagement. Switch Viewing as to the customer, or return to the dashboard.
         </p>
         <Link href="/" className="md-button-outlined mt-6">Back to dashboard</Link>
+      </div>
+    );
+  }
+
+  if (attending) {
+    const activeStep = agendaForSession(graph).find((step) => step.state === "active") ?? null;
+    return (
+      <div className="mx-auto max-w-5xl px-4 py-8 md:px-8 md:py-12">
+        <p className="md-label-large text-[var(--md-sys-color-primary)]">Customer</p>
+        <h1 className="md-display-small mt-2">Hello, {viewer.name.split(" ")[0]}</h1>
+        <p className="md-body-large mt-3 max-w-2xl text-[var(--md-sys-color-on-surface-variant)]">
+          You are attending. The pain is already on the account.
+        </p>
+
+        <section className="md-card-outlined mt-8 p-6" aria-labelledby="engagement-summary-title">
+          <h2 id="engagement-summary-title" className="md-title-large">Your session</h2>
+          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <SummaryItem term="Company" detail={graph.session.customerName} />
+            <SummaryItem term="Stage" detail={activeStep ? activeStep.title : "Underway"} />
+            <SummaryItem term="Partner of record" detail={brand.partnerName} />
+            <SummaryItem term="Handoff" detail={handoff} />
+          </dl>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link href="/run" className="md-button-filled">
+              Open the session <ArrowRight className="size-4" />
+            </Link>
+          </div>
+        </section>
       </div>
     );
   }
@@ -77,20 +117,21 @@ export default function CustomerHomePage() {
             <SummaryItem term="Annual value" detail={`${formatCurrency(summary.annualValue)} / year`} />
           )}
           <SummaryItem term="Funding" detail={summary.funding} />
+          <SummaryItem term="Handoff" detail={handoff} />
         </dl>
-        {summary.started && (
+        {(summary.continueHref || hasAccount) && (
           <div className="mt-6 flex flex-wrap gap-3">
             {summary.continueHref && (
               <Link href={summary.continueHref} className="md-button-filled">
                 Continue session <ArrowRight className="size-4" />
               </Link>
             )}
-            <Link href="/funding" className="md-button-outlined">View funding pack</Link>
+            {hasAccount && <Link href="/funding" className="md-button-outlined">View funding pack</Link>}
           </div>
         )}
       </section>
 
-      <section className="mt-8" aria-labelledby="next-steps-title">
+      {hasAccount && <section className="mt-8" aria-labelledby="next-steps-title">
         <h2 id="next-steps-title" className="md-title-large">Next steps</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <NextStepCard icon={CalendarDays} title="Schedule a hackathon" body="Hold the three days once the shortlist is booked.">
@@ -106,14 +147,14 @@ export default function CustomerHomePage() {
               />
             )}
           </NextStepCard>
-          <NextStepCard icon={BadgeDollarSign} title="Apply for DAF" body="Funding follows the evidence in the business case.">
-            <Link href="/funding" className="md-button-outlined">Open funding <ArrowRight className="size-4" /></Link>
+          <NextStepCard icon={BadgeDollarSign} title="Funding pack" body="Your partner prepares the DAF claim from this business case.">
+            <Link href="/funding" className="md-button-outlined">View funding pack <ArrowRight className="size-4" /></Link>
           </NextStepCard>
           <NextStepCard icon={FileText} title="Open the business case" body="The case shows its arithmetic and credits the room.">
             <Link href="/artifact" className="md-button-outlined">Open business case <ArrowRight className="size-4" /></Link>
           </NextStepCard>
         </div>
-      </section>
+      </section>}
     </div>
   );
 }

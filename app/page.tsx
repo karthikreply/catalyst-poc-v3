@@ -7,6 +7,7 @@ import { ArrowRight, BadgeDollarSign, ChartNoAxesCombined, CircleHelp, Presentat
 
 import { useSession } from "@/components/session-provider";
 import type { Actor } from "@/lib/seed";
+import { customerSponsor, handoffLabel } from "@/lib/session";
 
 const entryDoors: { actor: Actor; title: string; tool: string; note?: string }[] = [
   {
@@ -27,9 +28,14 @@ const entryDoors: { actor: Actor; title: string; tool: string; note?: string }[]
 ];
 
 export default function Home() {
-  const { viewer, setActor, hydrated } = useSession();
+  const { graph, viewer, setActor, hydrated } = useSession();
   const router = useRouter();
   const customerViewer = viewer.actor === "cpm";
+  // Commercially the handoff window is 48 hours after the room. That is a definition, not a filter:
+  // the strip shows whatever was recorded, whenever it was recorded.
+  const handoff = graph.session.handoff;
+  const sponsor = handoff?.sponsor || graph.outcome.owner || customerSponsor(graph)?.name || "Not named";
+  const handoffAt = handoff ? new Date(handoff.at).toLocaleString() : "—";
 
   useEffect(() => {
     if (hydrated && customerViewer) router.replace("/customer");
@@ -74,6 +80,24 @@ export default function Home() {
         <div className="mt-6">
           <Link href="/scope" className="md-button-filled">Open value sessions <ArrowRight className="size-4" /></Link>
         </div>
+      </section>
+
+      <section className="md-card-outlined mt-6 p-5" aria-labelledby="handoff-strip-title">
+        <h2 id="handoff-strip-title" className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">Handoff · {graph.session.customerName}</h2>
+        <dl className="mt-3 grid gap-4 sm:grid-cols-3">
+          <div>
+            <dt className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">Sponsor</dt>
+            <dd className="md-title-medium mt-1">{sponsor}</dd>
+          </div>
+          <div>
+            <dt className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">Handoff</dt>
+            <dd className="md-title-medium mt-1">{handoffLabel(handoff)}</dd>
+          </div>
+          <div>
+            <dt className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">Time</dt>
+            <dd className="md-title-medium mt-1">{handoffAt}</dd>
+          </div>
+        </dl>
       </section>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

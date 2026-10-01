@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import { breadcrumbForPath, isBrandFlowPath, mergesSessionHeader, navItemsForActor, vendorNavItems } from "./vendor-shell";
 
 describe("vendor shell routing", () => {
-  it("keeps dashboard, value sessions, funding, and telemetry live", () => {
+  it("keeps dashboard, my sessions, value sessions, funding, and telemetry live", () => {
     expect(vendorNavItems.filter((item) => item.href).map((item) => item.label)).toEqual([
       "Dashboard",
+      "My sessions",
       "Value sessions",
       "Funding",
       "Telemetry",
@@ -22,6 +23,9 @@ describe("vendor shell routing", () => {
     expect(isBrandFlowPath("/funding", "pdm")).toBe(false);
     expect(isBrandFlowPath("/funding", "cpm")).toBe(false);
     expect(isBrandFlowPath("/telemetry", "partner")).toBe(false);
+    expect(isBrandFlowPath("/sessions", "partner")).toBe(false);
+    expect(isBrandFlowPath("/sessions", "pdm")).toBe(false);
+    expect(isBrandFlowPath("/sessions/", "partner")).toBe(false);
   });
 
   it("merges the session header into the brand band on run only", () => {
@@ -40,6 +44,8 @@ describe("vendor shell routing", () => {
     expect(isBrandFlowPath("/rank", "partner")).toBe(true);
     expect(breadcrumbForPath("/funding", "partner")).toEqual(["Partner network", "Funding"]);
     expect(breadcrumbForPath("/telemetry", "pdm")).toEqual(["Partner network", "Telemetry"]);
+    expect(breadcrumbForPath("/sessions", "partner")).toEqual(["Partner network", "My sessions"]);
+    expect(breadcrumbForPath("/sessions", "pdm")).toEqual(["Partner network", "My sessions"]);
     expect(breadcrumbForPath("/customer", "partner")).toEqual(["Partner network", "Customer"]);
     expect(isBrandFlowPath("/customer", "cpm")).toBe(false);
   });
@@ -51,6 +57,8 @@ describe("vendor shell routing", () => {
       ["Funding", "/funding"],
     ]);
     expect(navItemsForActor("partner").map((item) => item.label)).toEqual(vendorNavItems.map((item) => item.label));
+    expect(navItemsForActor("cpm").some((item) => item.href === "/sessions" || item.label === "My sessions")).toBe(false);
+    expect(navItemsForActor("partner").find((item) => item.label === "My sessions")?.href).toBe("/sessions");
     expect(navItemsForActor("pdm").find((item) => item.label === "Dashboard")?.href).toBe("/");
     for (const path of ["/", "/customer", "/scope", "/run", "/rank", "/artifact", "/funding"]) {
       expect(breadcrumbForPath(path, "cpm")[0]).toBe("Your engagement");

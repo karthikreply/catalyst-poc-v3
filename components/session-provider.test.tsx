@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { initialSessionGraph } from "@/lib/seed";
-import { applyDeliveryMode } from "@/lib/session";
+import { applyDeliveryMode, bookHackathon, rankedSolutions, toggleSelected } from "@/lib/session";
 
 import { SessionProvider, useSession } from "./session-provider";
 
@@ -19,17 +19,26 @@ function SessionActionsProbe() {
     applyExactClaims,
     setActiveStep,
     updateValue,
+    setPilotPick,
+    recordHandoff,
     canEditSession,
   } = useSession();
   const claims = graph.valueInputs.find((input) => input.id === "claims");
   const handling = graph.costComponents.find((component) => component.id === "handling");
   const activeStep = graph.agenda.find((step) => step.state === "active");
+  const bookedIds = graph.hackathon?.solutionIds ?? [];
 
   return (
     <>
       <output aria-label="actor">{viewer.actor}</output>
       <output aria-label="can-edit">{String(canEditSession)}</output>
       <output aria-label="active-step">{activeStep?.id ?? "none"}</output>
+      <output aria-label="pilot-pick">{graph.outcome.pilotPick ?? "none"}</output>
+      <output aria-label="handoff">{graph.session.handoff?.kind ?? "none"}</output>
+      <button type="button" onClick={() => recordHandoff("daf")}>Hand off DAF</button>
+      <button type="button" onClick={() => recordHandoff("pilot")}>Hand off pilot</button>
+      <button type="button" onClick={() => setPilotPick(bookedIds[0])}>Pick first</button>
+      <button type="button" onClick={() => setPilotPick(bookedIds[1])}>Pick second</button>
       <button type="button" onClick={() => setActiveStep("shape-the-pilot")}>Go to shape</button>
       <button type="button" onClick={() => updateValue("claims", 275)}>Set claims 275</button>
       <output aria-label="partner-note-count">{graph.partnerNotes.length}</output>
@@ -60,14 +69,11 @@ describe("SessionProvider action permissions", () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
-      return window.setTimeout(() => callback(0), 0);
-    });
-    vi.stubGlobal("cancelAnimationFrame", (handle: number) => window.clearTimeout(handle));
   });
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -131,6 +137,31 @@ describe("SessionProvider action permissions", () => {
     expect(screen.getByLabelText("claims-quantity")).toHaveTextContent("275");
   });
 
+  it("still opens the partner view when storage is blocked", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+
+    function HydrationProbe() {
+      const { hydrated, viewer } = useSession();
+      return <output aria-label="hydration">{hydrated ? viewer.actor : "pending"}</output>;
+    }
+
+    render(
+      <SessionProvider>
+        <HydrationProbe />
+      </SessionProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByLabelText("hydration")).toHaveTextContent("partner"));
+  });
+
   it("does not apply exact claims for CPM", async () => {
     renderForActor("cpm");
     await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent("cpm"));
@@ -141,5 +172,66 @@ describe("SessionProvider action permissions", () => {
     expect(screen.getByLabelText("claims-quantity")).toHaveTextContent("400");
     expect(screen.getByLabelText("claims-confirmer")).toHaveTextContent("Michelle Dorsey");
     expect(screen.getByLabelText("claims-respondent-confirmed")).toHaveTextContent("true");
+  });
+
+  describe("pilot pick", () => {
+    const ids = rankedSolutions(initialSessionGraph).map((solution) => solution.id).slice(0, 3);
+    const booked = bookHackathon(ids.reduce((current, id) => toggleSelected(current, id), initialSessionGraph), {
+      date: "2026-10-14",
+      googleFacilitator: "Priya Raghavan",
+      partnerSpecialist: "Ravi Menon",
+      customerOwner: "Dana Reyes",
+      question: "Can we prove the three?",
+    });
+
+    it.each(["partner", "cpm"] as const)("lets the %s set and replace the pilot pick", async (actor) => {
+      renderForActor(actor, booked);
+      await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent(actor));
+      expect(screen.getByLabelText("pilot-pick")).toHaveTextContent("none");
+
+      fireEvent.click(screen.getByRole("button", { name: "Pick first" }));
+      expect(screen.getByLabelText("pilot-pick")).toHaveTextContent(ids[0]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Pick second" }));
+      expect(screen.getByLabelText("pilot-pick")).toHaveTextContent(ids[1]);
+    });
+
+    it("does not let the PDM set the pilot pick", async () => {
+      renderForActor("pdm", booked);
+      await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent("pdm"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Pick first" }));
+      expect(screen.getByLabelText("pilot-pick")).toHaveTextContent("none");
+    });
+
+    it("keeps the pilot pick from writing a handoff", async () => {
+      renderForActor("partner", booked);
+      await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent("partner"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Pick first" }));
+      expect(screen.getByLabelText("pilot-pick")).toHaveTextContent(ids[0]);
+      expect(screen.getByLabelText("handoff")).toHaveTextContent("none");
+    });
+  });
+
+  describe("handoff", () => {
+    it("lets the partner record it once", async () => {
+      renderForActor("partner");
+      await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent("partner"));
+
+      fireEvent.click(screen.getByRole("button", { name: "Hand off DAF" }));
+      expect(screen.getByLabelText("handoff")).toHaveTextContent("daf");
+
+      fireEvent.click(screen.getByRole("button", { name: "Hand off pilot" }));
+      expect(screen.getByLabelText("handoff")).toHaveTextContent("daf");
+    });
+
+    it.each(["cpm", "pdm"] as const)("does not write for the %s", async (actor) => {
+      renderForActor(actor);
+      await waitFor(() => expect(screen.getByLabelText("actor")).toHaveTextContent(actor));
+
+      fireEvent.click(screen.getByRole("button", { name: "Hand off DAF" }));
+      expect(screen.getByLabelText("handoff")).toHaveTextContent("none");
+    });
   });
 });

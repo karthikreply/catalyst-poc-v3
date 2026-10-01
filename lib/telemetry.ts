@@ -1,6 +1,17 @@
-import type { Actor, CloseStyle } from "./seed";
+import type { Actor, CloseStyle, SessionGraph } from "./seed";
 
-export type TelemetryOutcome = "Scoped" | "Run" | "Hackathon proposed" | "Hackathon booked";
+export type TelemetryOutcome = "Scoped" | "Run" | "Hackathon proposed" | "Hackathon booked" | "Pilot signed";
+
+/** A signed pilot is still a booked hackathon that went further. */
+export function isBookedOutcome(outcome: TelemetryOutcome) {
+  return outcome === "Hackathon booked" || outcome === "Pilot signed";
+}
+
+/** Outcome for the live session overlay. A pilot pick on a booked hackathon reads as signed. */
+export function liveSessionOutcome(graph: SessionGraph, hasSessionValue: boolean): TelemetryOutcome {
+  if (graph.hackathon?.booked) return graph.outcome.pilotPick ? "Pilot signed" : "Hackathon booked";
+  return graph.session.scopeMode === "cold" && !hasSessionValue ? "Scoped" : "Hackathon proposed";
+}
 export type TelemetryPartner = "CDW" | "SoftwareOne" | "Insight" | "SHI";
 export type TelemetryDelivery = "facilitated" | "google-facilitated" | "self-service";
 export type TelemetryMechanic = "value-sprint" | "ghost-ledger";
@@ -129,6 +140,14 @@ export function buildTelemetrySessions(): TelemetrySession[] {
   for (const index of cdwSubmitted) {
     rows[index] = { ...rows[index], fundingClaimSubmitted: true };
   }
+
+  // After the rewrites above: every third row still booked went on to a signed pilot.
+  let bookedPosition = 0;
+  for (const [index, item] of rows.entries()) {
+    if (item.outcome !== "Hackathon booked") continue;
+    bookedPosition += 1;
+    if (bookedPosition % 3 === 0) rows[index] = { ...item, outcome: "Pilot signed" };
+  }
   return rows;
 }
 
@@ -136,9 +155,10 @@ export function summarizeTelemetry(rows: TelemetrySession[]) {
   return {
     sessionsScoped: rows.length,
     sessionsRun: rows.filter((item) => item.outcome !== "Scoped").length,
-    hackathonsProposed: rows.filter((item) => item.outcome === "Hackathon proposed" || item.outcome === "Hackathon booked").length,
+    hackathonsProposed: rows.filter((item) => item.outcome === "Hackathon proposed" || isBookedOutcome(item.outcome)).length,
     fundingClaimsSubmitted: rows.filter((item) => item.fundingClaimSubmitted).length,
-    hackathonsBooked: rows.filter((item) => item.outcome === "Hackathon booked").length,
+    hackathonsBooked: rows.filter((item) => isBookedOutcome(item.outcome)).length,
+    pilotsSigned: rows.filter((item) => item.outcome === "Pilot signed").length,
     fundedPipelineValue: rows.reduce((sum, item) => sum + item.fundedValue, 0),
   };
 }

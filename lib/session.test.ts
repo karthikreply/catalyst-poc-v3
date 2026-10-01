@@ -19,6 +19,7 @@ import {
   bookHackathon,
   bindAnnualValue,
   chooseCustomerFormat,
+  customerHasAccount,
   customerHomeSummary,
   latestStepCapture,
   lockRanking,
@@ -33,6 +34,7 @@ import {
   bookedSolutionTitles,
   rankedSolutions,
   canFlagReferenceStory,
+  canBookHackathon,
   canViewPartnerScope,
   claimsArtifactCopy,
   claimsPayoffCopy,
@@ -62,6 +64,16 @@ import {
   updateCapture,
   updateValueConfirmer,
   viewerForActor,
+  bookedSolutionPains,
+  defaultShowcaseAt,
+  pilotNextStepCopy,
+  pilotPickTitle,
+  pilotScopeLine,
+  setPilotPick,
+  showcaseLabel,
+  handoffLabel,
+  hasCompleteValueInputs,
+  recordHandoff,
 } from "./session";
 import { calculateAnnualValue } from "./value";
 
@@ -649,7 +661,11 @@ describe("artifact consequences", () => {
       secondary: null,
       tertiary: null,
     });
-    expect(artifactActions("cpm", false, "facilitated").secondary).toBeNull();
+    expect(artifactActions("cpm", false, "facilitated")).toEqual({
+      primary: null,
+      secondary: null,
+      tertiary: null,
+    });
   });
 
   it("offers reference-story review to vendor actors on the pilot spec", () => {
@@ -689,6 +705,9 @@ describe("scope access", () => {
   it("reserves partner-held scope details for partner and PDM doors", () => {
     expect(canViewPartnerScope("partner")).toBe(true);
     expect(canViewPartnerScope("pdm")).toBe(true);
+    expect(canBookHackathon("partner")).toBe(true);
+    expect(canBookHackathon("cpm")).toBe(true);
+    expect(canBookHackathon("pdm")).toBe(false);
     expect(canViewPartnerScope("cpm")).toBe(false);
   });
 
@@ -1053,6 +1072,16 @@ describe("customer home", () => {
     });
   }
 
+  it("is true only for a customer with a named cold account", () => {
+    expect(customerHasAccount("cpm", initialSessionGraph)).toBe(false);
+    expect(customerHasAccount("partner", applyColdScope(initialSessionGraph, { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees))).toBe(false);
+    expect(customerHasAccount("pdm", applyColdScope(initialSessionGraph, { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees))).toBe(false);
+    const named = applyColdScope(initialSessionGraph, { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees);
+    expect(customerHasAccount("cpm", named)).toBe(true);
+    const blank = applyColdScope(initialSessionGraph, { name: "  ", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees);
+    expect(customerHasAccount("cpm", blank)).toBe(false);
+  });
+
   it("treats the seeded facilitated graph as not started", () => {
     const summary = customerHomeSummary(initialSessionGraph, "CDW");
     expect(summary.started).toBe(false);
@@ -1137,5 +1166,185 @@ describe("customer home", () => {
     expect(latestStepCapture(noActive)?.text).toBe("We handled Q1 volume by paying overtime, not by hiring.");
     const cold = applyColdScope(initialSessionGraph, coldScopeDefaults.company, coldScopeDefaults.attendees);
     expect(latestStepCapture(cold)).toBeNull();
+  });
+});
+
+describe("after the calendar hold: showcase and pilot pick", () => {
+  const draft = {
+    date: "2026-10-14",
+    googleFacilitator: "Priya Raghavan",
+    partnerSpecialist: "Ravi Menon",
+    customerOwner: "Dana Reyes",
+    question: "Can we prove the three?",
+  };
+
+  function bookThree(graph = initialSessionGraph, showcaseAt?: string) {
+    const ids = rankedSolutions(graph).map((solution) => solution.id).slice(0, 3);
+    const selected = ids.reduce((current, id) => toggleSelected(current, id), graph);
+    return bookHackathon(selected, showcaseAt ? { ...draft, showcaseAt } : draft);
+  }
+
+  it("defaults the showcase to 14:00 on the third day", () => {
+    expect(defaultShowcaseAt("2026-10-14")).toBe("2026-10-16T14:00");
+    expect(defaultShowcaseAt("2026-12-31")).toBe("2027-01-02T14:00");
+    expect(defaultShowcaseAt("")).toBe("");
+    expect(showcaseLabel("2026-10-16T14:00")).toBe("2026-10-16 · 14:00");
+  });
+
+  it("stores showcaseAt on booking and carries it in the compose URL", () => {
+    const booked = bookThree();
+    expect(booked.hackathon?.showcaseAt).toBe("2026-10-16T14:00");
+    const decoded = decodeURIComponent(googleCalendarComposeUrl(booked).replace(/\+/g, "%20"));
+    expect(decoded).toContain("Showcase: 2026-10-16T14:00");
+
+    const moved = bookThree(initialSessionGraph, "2026-10-16T16:30");
+    expect(moved.hackathon?.showcaseAt).toBe("2026-10-16T16:30");
+    expect(decodeURIComponent(googleCalendarComposeUrl(moved).replace(/\+/g, "%20"))).toContain("Showcase: 2026-10-16T16:30");
+  });
+
+  it("hydrates old graphs with a default showcase and a null pilot pick", () => {
+    const booked = bookThree();
+    const legacy = JSON.parse(JSON.stringify(booked)) as typeof booked;
+    delete legacy.hackathon!.showcaseAt;
+    delete (legacy.outcome as Partial<typeof legacy.outcome>).pilotPick;
+    const hydrated = hydrateSessionGraph(legacy);
+    expect(hydrated.hackathon?.showcaseAt).toBe("2026-10-16T14:00");
+    expect(hydrated.outcome.pilotPick).toBeNull();
+    expect(hydrateSessionGraph(JSON.parse(JSON.stringify(initialSessionGraph))).outcome.pilotPick).toBeNull();
+  });
+
+  it("pairs each booked title with the latest capture on the step that named it, else its outcome", () => {
+    const booked = bookThree();
+    const rows = bookedSolutionPains(booked);
+    expect(rows.map((row) => row.title)).toEqual(bookedSolutionTitles(booked));
+    const intake = rows.find((row) => row.id === "sol-intake-extraction")!;
+    expect(intake.pain).toBe("We handled Q1 volume by paying overtime, not by hiring.");
+    const review = rows.find((row) => row.id === "sol-low-confidence-review")!;
+    expect(review.pain).toBe("Our forms have handwritten adjuster notes in the margin.");
+
+    const noCaptures = { ...booked, captures: [] };
+    expect(bookedSolutionPains(noCaptures).map((row) => row.pain)).toEqual(
+      booked.hackathon!.solutionIds.map((id) => initialSessionGraph.solutions.find((s) => s.id === id)!.outcome),
+    );
+    expect(bookedSolutionPains(initialSessionGraph)).toEqual([]);
+  });
+
+  it("sets and replaces the pilot pick only among the three booked, separate from votes", () => {
+    const booked = bookThree();
+    const [first, second] = booked.hackathon!.solutionIds;
+    expect(pilotPickTitle(booked)).toBeNull();
+    expect(setPilotPick(initialSessionGraph, first)).toBe(initialSessionGraph);
+    expect(setPilotPick(booked, "sol-audit-trail")).toBe(booked);
+
+    const picked = setPilotPick(booked, first);
+    expect(picked.outcome.pilotPick).toBe(first);
+    expect(pilotPickTitle(picked)).toBe(bookedSolutionTitles(booked)[0]);
+    expect(picked.votes).toEqual(booked.votes);
+    expect(picked.ranking).toEqual(booked.ranking);
+
+    const replaced = setPilotPick(picked, second);
+    expect(replaced.outcome.pilotPick).toBe(second);
+    expect(setPilotPick(replaced, second)).toBe(replaced);
+    expect(castVote(replaced, "dana", first).outcome.pilotPick).toBe(second);
+  });
+
+  it("hands off to the pilot spec, business case, and customer stage once picked", () => {
+    const booked = bookThree(chooseCustomerFormat(initialSessionGraph, "value-sprint"));
+    expect(pilotNextStepCopy(booked)).toBe(booked.outcome.nextStep);
+    expect(pilotScopeLine(booked)).toBeNull();
+    expect(customerHomeSummary(booked, "CDW").stage).not.toBe("Pilot scoped");
+
+    const picked = setPilotPick(booked, booked.hackathon!.solutionIds[1]);
+    const title = bookedSolutionTitles(booked)[1];
+    expect(pilotNextStepCopy(picked)).toBe(`Six-week pilot on ${title}`);
+    expect(pilotScopeLine(picked)).toBe(`Six-week pilot on ${title}, scoped in the three-day hackathon.`);
+    expect(customerHomeSummary(picked, "CDW").stage).toBe("Pilot scoped");
+    expect(picked.outcome.useCase).toBe(booked.outcome.useCase);
+  });
+
+  it("clears the pick when the graph enters cold scope", () => {
+    const picked = setPilotPick(bookThree(), bookThree().hackathon!.solutionIds[0]);
+    const cold = applyColdScope(picked, coldScopeDefaults.company, coldScopeDefaults.attendees);
+    expect(cold.outcome.pilotPick).toBeNull();
+    expect(pilotPickTitle(cold)).toBeNull();
+  });
+
+  it("keeps the mechanic and the customer format once the hackathon is booked", () => {
+    const booked = bookThree();
+    expect(applyMechanic(booked, "ghost-ledger")).toBe(booked);
+    expect(booked.session.mechanic).toBe("value-sprint");
+
+    const formatted = chooseCustomerFormat(booked, "ghost-ledger");
+    expect(formatted).toBe(booked);
+    expect(formatted.session.delivery).toBe(booked.session.delivery);
+    expect(formatted.session.customerFormatChosen).toBe(booked.session.customerFormatChosen);
+  });
+});
+
+describe("handoff", () => {
+  const ids = rankedSolutions(initialSessionGraph).map((solution) => solution.id).slice(0, 3);
+  const booked = bookHackathon(ids.reduce((current, id) => toggleSelected(current, id), initialSessionGraph), {
+    date: "2026-10-14",
+    googleFacilitator: "Priya Raghavan",
+    partnerSpecialist: "Ravi Menon",
+    customerOwner: "Dana Reyes",
+    question: "Can we prove the three?",
+  });
+
+  it("starts null and loads as null when missing", () => {
+    expect(initialSessionGraph.session.handoff).toBeNull();
+    const legacy = JSON.parse(JSON.stringify(initialSessionGraph));
+    delete legacy.session.handoff;
+    expect(hydrateSessionGraph(legacy).session.handoff).toBeNull();
+  });
+
+  it("writes once with the sponsor and time, then ignores a second kind", () => {
+    const before = Date.now();
+    const handed = recordHandoff(initialSessionGraph, "daf");
+    expect(handed.session.handoff?.kind).toBe("daf");
+    expect(handed.session.handoff?.sponsor).toBe("Alex Chen");
+    expect(Date.parse(handed.session.handoff!.at)).toBeGreaterThanOrEqual(before);
+
+    const again = recordHandoff(handed, "pilot");
+    expect(again).toBe(handed);
+    expect(again.session.handoff?.kind).toBe("daf");
+    expect(hydrateSessionGraph(JSON.parse(JSON.stringify(handed))).session.handoff).toEqual(handed.session.handoff);
+  });
+
+  it("falls back to the attending sponsor when no owner is named", () => {
+    const noOwner = { ...initialSessionGraph, outcome: { ...initialSessionGraph.outcome, owner: null } };
+    expect(recordHandoff(noOwner, "pdm-notified").session.handoff?.sponsor).toBe("Dana Reyes");
+  });
+
+  it("stays separate from the pilot pick", () => {
+    const picked = setPilotPick(booked, booked.hackathon!.solutionIds[0]);
+    expect(picked.session.handoff).toBeNull();
+    const handed = recordHandoff(booked, "pilot");
+    expect(handed.outcome.pilotPick).toBeNull();
+  });
+
+  it("labels each state in sentence case", () => {
+    expect(handoffLabel(null)).toBe("Not yet handed off");
+    expect(handoffLabel({ kind: "daf", at: "", sponsor: "" })).toBe("DAF with the partner");
+    expect(handoffLabel({ kind: "pilot", at: "", sponsor: "" })).toBe("Pilot filed");
+    expect(handoffLabel({ kind: "pdm-notified", at: "", sponsor: "" })).toBe("PDM notified");
+  });
+});
+
+describe("ghost-ledger gate", () => {
+  const coldPartner = applyColdScope(initialSessionGraph, coldScopeDefaults.company, coldScopeDefaults.attendees);
+
+  it("does not move a partner-led session to the ledger without complete value inputs", () => {
+    expect(hasCompleteValueInputs(coldPartner)).toBe(false);
+    expect(applyMechanic(coldPartner, "ghost-ledger")).toBe(coldPartner);
+    expect(applyMechanic(initialSessionGraph, "ghost-ledger").session.mechanic).toBe("ghost-ledger");
+  });
+
+  it("lets a self-service session choose the ledger and enter the numbers there", () => {
+    const selfService = applyDeliveryMode(coldPartner, "self-service");
+    expect(applyMechanic(selfService, "ghost-ledger").session.mechanic).toBe("ghost-ledger");
+    const door = chooseCustomerFormat(coldPartner, "ghost-ledger");
+    expect(door.session.mechanic).toBe("ghost-ledger");
+    expect(door.session.delivery).toBe("self-service");
   });
 });

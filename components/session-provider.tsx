@@ -12,6 +12,7 @@ import {
   type ColdAttendee,
   type ColdCompany,
   type Delivery,
+  type HandoffKind,
   type Mechanic,
   type SessionGraph,
 } from "@/lib/seed";
@@ -27,6 +28,7 @@ import {
   applyReusePriorPilotSpec,
   bindAnnualValue,
   bookHackathon as bookHackathonInGraph,
+  canBookHackathon,
   chooseCustomerFormat as chooseCustomerFormatInGraph,
   markHackathonCalendarAdded as markHackathonCalendarAddedInGraph,
   markHackathonMeetAdded as markHackathonMeetAddedInGraph,
@@ -36,9 +38,11 @@ import {
   isSessionReadOnly,
   lockRanking as lockRankingInGraph,
   moveSolution as moveSolutionInGraph,
+  recordHandoff as recordHandoffInGraph,
   restoreSeededGraph,
   savePartnerNote as savePartnerNoteInGraph,
   saveSessionOutcome as saveSessionOutcomeInGraph,
+  setPilotPick as setPilotPickInGraph,
   toggleSelected as toggleSelectedInGraph,
   unlockRanking as unlockRankingInGraph,
   updateCapture as updateCaptureInGraph,
@@ -46,9 +50,9 @@ import {
   viewerForActor,
   type ClaimsVolumeChoice,
   type FundingRoute,
+  type HackathonDraft,
   type Viewer,
 } from "@/lib/session";
-import type { HackathonBooking } from "@/lib/seed";
 
 type SessionContextValue = {
   graph: SessionGraph;
@@ -82,9 +86,11 @@ type SessionContextValue = {
   castVote: (attendeeId: string, solutionId: string) => void;
   lockRanking: () => void;
   unlockRanking: () => void;
-  bookHackathon: (draft: Omit<HackathonBooking, "booked" | "solutionIds" | "calendarAdded" | "meetAdded">) => void;
+  bookHackathon: (draft: HackathonDraft) => void;
   markHackathonCalendarAdded: () => void;
   markHackathonMeetAdded: () => void;
+  setPilotPick: (solutionId: string) => void;
+  recordHandoff: (kind: HandoffKind) => void;
   chooseCustomerFormat: (mechanic: Mechanic) => void;
   canEditSession: boolean;
   hydrated: boolean;
@@ -104,6 +110,38 @@ const SUPERSEDED_KEYS = [
   "catalyst-seeded-graph-v3",
 ];
 
+/** Read the stored session once on mount. Private windows can block storage; the default partner view still opens. */
+function hydrateFromStorage(apply: {
+  graph: (graph: SessionGraph) => void;
+  brand: (brandId: BrandId) => void;
+  actor: (actor: Actor) => void;
+  hydrated: () => void;
+}) {
+  try {
+    SUPERSEDED_KEYS.forEach((key) => localStorage.removeItem(key));
+    const savedGraph = localStorage.getItem(GRAPH_KEY);
+    const savedBrand = localStorage.getItem(BRAND_KEY) as BrandId | null;
+    const savedActor = sessionStorage.getItem(ACTOR_KEY) as Actor | null;
+    if (savedGraph) {
+      try {
+        const savedViewer = savedActor === "pdm" || savedActor === "partner" || savedActor === "cpm"
+          ? savedActor
+          : "partner";
+        apply.graph(graphForActor(hydrateSessionGraph(JSON.parse(savedGraph) as SessionGraph), savedViewer));
+      } catch {
+        localStorage.removeItem(GRAPH_KEY);
+      }
+    }
+    if (savedBrand && brands[savedBrand]) apply.brand(savedBrand);
+    if (savedActor === "pdm" || savedActor === "partner" || savedActor === "cpm") {
+      apply.actor(savedActor);
+    }
+  } catch {
+    // Storage blocked. Fall through so the default partner view still opens.
+  }
+  apply.hydrated();
+}
+
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [graph, setGraph] = useState<SessionGraph>(initialSessionGraph);
   const [brandId, setBrandIdState] = useState<BrandId>("cdw");
@@ -111,34 +149,21 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    if (hydrated) return;
-    SUPERSEDED_KEYS.forEach((key) => localStorage.removeItem(key));
-    const savedGraph = localStorage.getItem(GRAPH_KEY);
-    const savedBrand = localStorage.getItem(BRAND_KEY) as BrandId | null;
-    const savedActor = sessionStorage.getItem(ACTOR_KEY) as Actor | null;
-    const frame = requestAnimationFrame(() => {
-      if (savedGraph) {
-        try {
-          const savedViewer = savedActor === "pdm" || savedActor === "partner" || savedActor === "cpm"
-            ? savedActor
-            : "partner";
-          setGraph(graphForActor(hydrateSessionGraph(JSON.parse(savedGraph) as SessionGraph), savedViewer));
-        } catch {
-          localStorage.removeItem(GRAPH_KEY);
-        }
-      }
-      if (savedBrand && brands[savedBrand]) setBrandIdState(savedBrand);
-      if (savedActor === "pdm" || savedActor === "partner" || savedActor === "cpm") {
-        setActorState(savedActor);
-      }
-      setHydrated(true);
+    hydrateFromStorage({
+      graph: setGraph,
+      brand: setBrandIdState,
+      actor: setActorState,
+      hydrated: () => setHydrated(true),
     });
-    return () => cancelAnimationFrame(frame);
-  }, [hydrated]);
+  }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(GRAPH_KEY, JSON.stringify(graph));
+    try {
+      localStorage.setItem(GRAPH_KEY, JSON.stringify(graph));
+    } catch {
+      // Keep the in-memory session when storage is unavailable.
+    }
   }, [graph, hydrated]);
 
   const brand = brands[brandId];
@@ -346,9 +371,21 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setGraph((current) => unlockRankingInGraph(current));
   }
 
-  function bookHackathon(draft: Omit<HackathonBooking, "booked" | "solutionIds" | "calendarAdded" | "meetAdded">) {
-    if (!canCustomerAct) return;
+  function bookHackathon(draft: HackathonDraft) {
+    if (!canBookHackathon(actor)) return;
     setGraph((current) => bookHackathonInGraph(current, draft));
+  }
+
+  function setPilotPick(solutionId: string) {
+    // The partner and the customer name the pilot at the showcase. The PDM only sees the pick.
+    if (!canBookHackathon(actor)) return;
+    setGraph((current) => setPilotPickInGraph(current, solutionId));
+  }
+
+  function recordHandoff(kind: HandoffKind) {
+    // Only the partner hands the session off. The customer and the PDM only see the result.
+    if (actor !== "partner") return;
+    setGraph((current) => recordHandoffInGraph(current, kind));
   }
 
   function markHackathonCalendarAdded() {
@@ -402,6 +439,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     bookHackathon,
     markHackathonCalendarAdded,
     markHackathonMeetAdded,
+    setPilotPick,
+    recordHandoff,
     chooseCustomerFormat,
     canEditSession,
     hydrated,

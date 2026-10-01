@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { brands } from "@/lib/brands";
 import { initialSessionGraph } from "@/lib/seed";
+import { applyColdScope, coldScopeDefaults } from "@/lib/session";
 
 const { useSessionMock } = vi.hoisted(() => ({
   useSessionMock: vi.fn(),
@@ -19,10 +20,11 @@ describe("read-only Plan controls", () => {
     useSessionMock.mockReset();
   });
 
-  it("disables delivery and mechanic options for CPM and exposes selected states", () => {
+  it("asks the customer to add a company before showing a seeded plan", () => {
     useSessionMock.mockReturnValue({
       graph: initialSessionGraph,
       brand: brands.cdw,
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
       setDelivery: vi.fn(),
       setMechanic: vi.fn(),
       setCloseStyle: vi.fn(),
@@ -31,9 +33,55 @@ describe("read-only Plan controls", () => {
 
     const markup = renderToStaticMarkup(<PlanPage />);
 
-    expect(markup.match(/disabled=""/g)).toHaveLength(7);
-    expect(markup.match(/aria-pressed="true"/g)).toHaveLength(3);
-    expect(markup.match(/aria-pressed="false"/g)).toHaveLength(4);
+    expect(markup).toContain("Add the company before the session");
+    expect(markup).toContain('href="/scope"');
+    expect(markup).not.toContain("Invitation drafts");
+    expect(markup).not.toContain("Push to CRM");
+    expect(markup).not.toContain("Heartland");
+  });
+
+  it("briefs the customer from their account and leaves invitations to the partner", () => {
+    const account = applyColdScope(
+      initialSessionGraph,
+      { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" },
+      coldScopeDefaults.attendees,
+    );
+    useSessionMock.mockReturnValue({
+      graph: account,
+      brand: brands.cdw,
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Reply" },
+      setDelivery: vi.fn(),
+      setMechanic: vi.fn(),
+      setCloseStyle: vi.fn(),
+      canEditSession: true,
+    });
+
+    const customerMarkup = renderToStaticMarkup(<PlanPage />);
+    expect(customerMarkup).toContain("Before the session");
+    expect(customerMarkup).toContain("What you will cover, who to bring, and what to have ready.");
+    expect(customerMarkup).toContain("Prioritize my use cases");
+    expect(customerMarkup).toContain("CDW");
+    expect(customerMarkup).toContain("Laura Beckett");
+    expect(customerMarkup).toContain("VP Claims Operations");
+    expect(customerMarkup).toContain("Start the session");
+    expect(customerMarkup).toContain('href="/run"');
+    expect(customerMarkup).not.toContain("Invitation drafts");
+    expect(customerMarkup).not.toContain("Push to CRM");
+    expect(customerMarkup).not.toContain("Practice sponsor");
+    expect(customerMarkup).not.toContain("Who runs it");
+
+    useSessionMock.mockReturnValue({
+      graph: account,
+      brand: brands.cdw,
+      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      setDelivery: vi.fn(),
+      setMechanic: vi.fn(),
+      setCloseStyle: vi.fn(),
+      canEditSession: true,
+    });
+    const partnerMarkup = renderToStaticMarkup(<PlanPage />);
+    expect(partnerMarkup).toContain("Invitation drafts");
+    expect(partnerMarkup).toContain("Push to CRM");
   });
 
   it("renders at most one partner context", () => {
@@ -56,6 +104,7 @@ describe("read-only Plan controls", () => {
         ],
       },
       brand: brands.cdw,
+      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
       setDelivery: vi.fn(),
       setMechanic: vi.fn(),
       setCloseStyle: vi.fn(),
@@ -75,6 +124,7 @@ describe("read-only Plan controls", () => {
         session: { ...initialSessionGraph.session, closeStyle: "board-slide" },
       },
       brand: brands.cdw,
+      viewer: { actor: "pdm", name: "Priya Raghavan", org: "Google" },
       setDelivery: vi.fn(),
       setMechanic: vi.fn(),
       setCloseStyle: vi.fn(),

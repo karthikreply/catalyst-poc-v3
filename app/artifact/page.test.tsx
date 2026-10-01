@@ -6,9 +6,13 @@ import { initialSessionGraph } from "@/lib/seed";
 import {
   applyClaimsVolumeChoice,
   applyCloseStyle,
+  applyColdScope,
   applyExactClaimsVolume,
   bookHackathon,
+  bookedSolutionPains,
+  coldScopeDefaults,
   rankedSolutions,
+  setPilotPick,
   toggleSelected,
 } from "@/lib/session";
 
@@ -34,6 +38,40 @@ vi.mock("html2canvas-pro", () => ({ default: vi.fn() }));
 vi.mock("jspdf", () => ({ default: vi.fn() }));
 
 import ArtifactPage from "./page";
+
+describe("customer without an account", () => {
+  it("does not render the seeded Heartland case", () => {
+    useSessionMock.mockReturnValue({
+      graph: initialSessionGraph,
+      brand: brands.cdw,
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+      markHackathonCalendarAdded: vi.fn(),
+    });
+    const markup = renderToStaticMarkup(<ArtifactPage />);
+    expect(markup).toContain("This is written once your account is in the session.");
+    expect(markup).toContain('href="/scope"');
+    expect(markup).not.toContain("Heartland");
+  });
+
+  it("does not offer a funding request once the account is in the session", () => {
+    useSessionMock.mockReturnValue({
+      graph: {
+        ...initialSessionGraph,
+        session: { ...initialSessionGraph.session, scopeMode: "cold", customerName: "Reply" },
+      },
+      brand: brands.cdw,
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Reply" },
+      canEditSession: true,
+      bookHackathon: vi.fn(),
+      markHackathonCalendarAdded: vi.fn(),
+    });
+    const markup = renderToStaticMarkup(<ArtifactPage />);
+    expect(markup).toContain("Prepared for Reply.");
+    expect(markup).not.toContain("Review funding request");
+    expect(markup).not.toContain('href="/funding"');
+    expect(markup).toContain("Open pilot spec");
+  });
+});
 
 describe("exact claims provenance", () => {
   it("renders partner-entered, non-respondent-confirmed provenance", () => {
@@ -142,5 +180,122 @@ describe("board-slide close", () => {
     expect(renderArtifact(initialSessionGraph)).toContain('href="/rank"');
     expect(renderArtifact(initialSessionGraph)).toContain("Rank and book");
     expect(renderArtifact(initialSessionGraph)).not.toContain("Confirm hackathon capacity");
+  });
+});
+
+describe("hackathon booking on the business case", () => {
+  it("shows the booking form once three are selected", () => {
+    useSessionMock.mockReturnValue({
+      graph: selectThree(),
+      brand: brands.cdw,
+      viewer: { actor: "partner", name: "Ravi Menon", org: "CDW" },
+      canEditSession: true,
+      bookHackathon: vi.fn(),
+      markHackathonCalendarAdded: vi.fn(),
+    });
+    const markup = renderToStaticMarkup(<ArtifactPage />);
+    expect(markup).toContain("Book the three-day hackathon");
+    expect(markup).toContain("The three days scope a six-week pilot on these solutions.");
+    expect(markup).toContain("Hackathon date");
+    expect(markup).toContain("Book hackathon");
+    expect(markup).not.toContain("Rank and book");
+  });
+
+  it("does not let the PDM book", () => {
+    useSessionMock.mockReturnValue({
+      graph: selectThree(),
+      brand: brands.cdw,
+      viewer: { actor: "pdm", name: "Priya Raghavan", org: "Google" },
+      canEditSession: true,
+      bookHackathon: vi.fn(),
+      markHackathonCalendarAdded: vi.fn(),
+    });
+    const markup = renderToStaticMarkup(<ArtifactPage />);
+    expect(markup).toContain("A PDM does not book it.");
+    expect(markup).not.toContain("Book hackathon");
+    expect(markup).not.toContain("Hackathon date");
+  });
+});
+
+describe("the three days, on the booked business case", () => {
+  const draft = {
+    date: "2026-10-14",
+    googleFacilitator: "Priya Raghavan",
+    partnerSpecialist: "Ravi Menon",
+    customerOwner: "Dana Reyes",
+    question: "Can we prove the three?",
+  };
+  const partner = { actor: "partner", name: "Ravi Menon", org: "CDW" };
+  const pdm = { actor: "pdm", name: "Priya Raghavan", org: "Google" };
+  const customer = { actor: "cpm", name: "Marcus Hale", org: "Reply" };
+  const bookedHeartland = bookHackathon(selectThree(), draft);
+  const bookedCold = bookHackathon(
+    selectThree(applyColdScope(initialSessionGraph, { name: "Reply", industry: "Insurance", sizeBand: "Enterprise" }, coldScopeDefaults.attendees)),
+    { ...draft, customerOwner: "Devin Cole" },
+  );
+
+  function render(graph: typeof initialSessionGraph, viewer: { actor: string; name: string; org: string }) {
+    useSessionMock.mockReturnValue({
+      graph,
+      brand: brands.cdw,
+      viewer,
+      canEditSession: viewer.actor !== "cpm",
+      bookHackathon: vi.fn(),
+      setPilotPick: vi.fn(),
+      markHackathonCalendarAdded: vi.fn(),
+    });
+    return renderToStaticMarkup(<ArtifactPage />);
+  }
+
+  it.each([
+    ["partner", partner, bookedHeartland],
+    ["PDM", pdm, bookedHeartland],
+    ["customer", customer, bookedCold],
+  ])("shows the three titles with pain lines and the scope line to the %s", (_label, viewer, graph) => {
+    const markup = render(graph, viewer);
+    expect(markup).toContain("What the three days produce");
+    expect(markup).toContain("This demo shows the scope, not the build.");
+    expect(markup).toContain("Judged against the pain captured in the session.");
+    expect(markup).toContain("Solution showcase");
+    expect(markup).toContain("2026-10-16 · 14:00");
+    expect(markup).toContain("Send reminders");
+    const rows = bookedSolutionPains(graph);
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(markup).toContain(row.title);
+      expect(markup).toContain(row.pain.replaceAll("'", "&#x27;"));
+    }
+  });
+
+  it("offers Choose to the partner and the customer, and only the pick to the PDM", () => {
+    expect(render(bookedHeartland, partner)).toContain("as the pilot");
+    expect(render(bookedCold, customer)).toContain("as the pilot");
+    const pdmMarkup = render(bookedHeartland, pdm);
+    expect(pdmMarkup).not.toContain("as the pilot");
+    expect(pdmMarkup).toContain("Pilot not yet chosen");
+
+    const picked = setPilotPick(bookedHeartland, bookedHeartland.hackathon!.solutionIds[2]);
+    const title = bookedSolutionPains(picked)[2].title;
+    expect(render(picked, pdm)).toContain(`Pilot: ${title}`);
+    expect(render(picked, partner)).toContain("Chosen");
+  });
+
+  it("names the picked title as the next step, and is unchanged without a pick", () => {
+    const title = bookedSolutionPains(bookedHeartland)[1].title;
+    expect(render(bookedHeartland, partner)).not.toContain(`Six-week pilot on ${title}`);
+    const picked = setPilotPick(bookedHeartland, bookedHeartland.hackathon!.solutionIds[1]);
+    const markup = render(picked, partner);
+    expect(markup).toContain(`Six-week pilot on ${title}`);
+    expect(markup).toContain("Start DAF funding request");
+  });
+
+  it("keeps buy, purchase, and Apply for DAF off the customer's business case", () => {
+    const picked = setPilotPick(bookedCold, bookedCold.hackathon!.solutionIds[0]);
+    for (const graph of [bookedCold, picked]) {
+      const markup = render(graph, customer);
+      expect(markup).not.toMatch(/\b(buy|purchase)\b/i);
+      expect(markup).not.toContain("Apply for DAF");
+      expect(markup).not.toContain("Review funding request");
+    }
   });
 });

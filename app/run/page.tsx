@@ -10,12 +10,12 @@ import { Input } from "@/components/ui/input";
 import { useSession } from "@/components/session-provider";
 import { ValueSprintPanel } from "@/components/value-sprint-panel";
 import { nextQuestionSuggestion } from "@/lib/facilitation";
-import { agendaForSession } from "@/lib/session";
-import type { Capture } from "@/lib/seed";
+import { agendaForSession, handoffLabel } from "@/lib/session";
+import type { Capture, Handoff, HandoffKind } from "@/lib/seed";
 import { cn } from "@/lib/utils";
 
 export default function RunPage() {
-  const { graph, brand, addCapture, updateCapture, saveSessionOutcome, setActiveStep, canEditSession, viewer } = useSession();
+  const { graph, brand, addCapture, updateCapture, saveSessionOutcome, setActiveStep, canEditSession, viewer, recordHandoff } = useSession();
   const agenda = agendaForSession(graph);
   const activeStep = agenda.find((step) => step.state === "active") ?? agenda[2];
   const activeIndex = Math.max(0, agenda.findIndex((step) => step.id === activeStep.id));
@@ -28,6 +28,8 @@ export default function RunPage() {
   const [suggesting, setSuggesting] = useState(false);
   const [suggestion, setSuggestion] = useState<{ stepId: string; text: string } | null>(null);
   const selfService = graph.session.delivery === "self-service";
+  const customer = viewer.actor === "cpm";
+  const showHandoff = viewer.actor === "partner" && activeStep.id === "owner-and-ask";
   const selectedPerson = capturePeople.includes(person) ? person : capturePeople[0] ?? "Participant";
   const capturePerson = selfService ? capturePeople[0] ?? "Respondent" : selectedPerson;
 
@@ -99,18 +101,22 @@ export default function RunPage() {
                   <p className="mt-2 text-sm text-black/55">{activeStep.subPrompt}</p>
                 )}
               </div>
-              <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
-                <AgendaStepPrimary
-                  nextStep={nextStep}
-                  isLastStep={isLastStep}
-                  onContinue={(stepId) => setActiveStep(stepId)}
-                />
-                {!isLastStep && (
-                  <Link href="/rank" className="text-center text-sm text-black/55 underline-offset-4 hover:underline sm:text-right">
-                    Skip to rank
-                  </Link>
-                )}
-              </div>
+              {(!customer || !isLastStep) && (
+                <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+                  {!customer && (
+                    <AgendaStepPrimary
+                      nextStep={nextStep}
+                      isLastStep={isLastStep}
+                      onContinue={(stepId) => setActiveStep(stepId)}
+                    />
+                  )}
+                  {!isLastStep && (
+                    <Link href="/rank" className="text-center text-sm text-black/55 underline-offset-4 hover:underline sm:text-right">
+                      Skip to rank
+                    </Link>
+                  )}
+                </div>
+              )}
             </div>
             {!selfService && (
               <div className="mt-4 max-w-4xl">
@@ -197,22 +203,26 @@ export default function RunPage() {
               />
             )}
 
+            {showHandoff && <HandoffControls handoff={graph.session.handoff} onRecord={recordHandoff} />}
+
             <div className="h-20" aria-hidden />
           </div>
         </section>
       </div>
 
-      <div className="sticky bottom-0 z-20 border-t border-black/10 bg-white/95 px-5 py-3 backdrop-blur lg:px-8">
-        <div className="mx-auto max-w-5xl md:pl-[180px]">
-          <AgendaStepNav
-            prevStep={prevStep}
-            nextStep={nextStep}
-            isLastStep={isLastStep}
-            onBack={(stepId) => setActiveStep(stepId)}
-            onContinue={(stepId) => setActiveStep(stepId)}
-          />
+      {!customer && (
+        <div className="sticky bottom-0 z-20 border-t border-black/10 bg-white/95 px-5 py-3 backdrop-blur lg:px-8">
+          <div className="mx-auto max-w-5xl md:pl-[180px]">
+            <AgendaStepNav
+              prevStep={prevStep}
+              nextStep={nextStep}
+              isLastStep={isLastStep}
+              onBack={(stepId) => setActiveStep(stepId)}
+              onContinue={(stepId) => setActiveStep(stepId)}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -291,6 +301,36 @@ function AgendaStepNav({
         </Button>
       )}
     </nav>
+  );
+}
+
+function HandoffControls({ handoff, onRecord }: { handoff: Handoff | null; onRecord: (kind: HandoffKind) => void }) {
+  const recorded = Boolean(handoff);
+  return (
+    <section className="mt-7" aria-labelledby="handoff-title">
+      <div className="mb-3">
+        <h3 id="handoff-title" className="font-semibold">Hand off</h3>
+        <p className="text-sm text-black/50">Record what you do with this session. The first choice sticks.</p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 rounded-sm border border-black/10 bg-white p-4">
+        <Link
+          href="/funding"
+          onClick={() => onRecord("daf")}
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          Prepare the DAF claim <ArrowRight />
+        </Link>
+        <Button type="button" variant="outline" size="sm" disabled={recorded} onClick={() => onRecord("pilot")}>
+          File the pilot
+        </Button>
+        <Button type="button" variant="outline" size="sm" disabled={recorded} onClick={() => onRecord("pdm-notified")}>
+          Notify the PDM
+        </Button>
+        <p role="status" aria-live="polite" className="ml-auto text-xs font-medium text-black/58">
+          {handoffLabel(handoff)}
+        </p>
+      </div>
+    </section>
   );
 }
 

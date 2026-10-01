@@ -23,6 +23,7 @@ import {
   demonstrationColdAccount,
   enrichAttendeeName,
   withDemonstrationColdAccount,
+  isSessionReadOnly,
   isValidExactClaimsVolume,
   missingColdRoles,
   type ClaimsVolumeChoice,
@@ -148,6 +149,48 @@ export default function ScopePage() {
     />
   );
 
+  // Same rule as Run: a customer on a partner-led session attends it. No lookup, no door.
+  if (viewer.actor === "cpm" && isSessionReadOnly(viewer.actor, graph)) {
+    return (
+      <div className="mx-auto max-w-5xl px-5 py-8 lg:px-8">
+        <p className="text-sm text-black/48">Attending</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight">Scope the value session</h1>
+        <p className="mt-2 text-sm text-black/55">You are attending. The pain is already on the account.</p>
+
+        <div className="mt-6 grid gap-5 md:grid-cols-2">
+          <section className="rounded-sm border border-black/10 bg-white p-6">
+            <h2 className="font-semibold">Account</h2>
+            <p className="mt-3 text-lg font-semibold">{graph.session.customerName}</p>
+            <p className="mt-1 text-sm text-black/55">{graph.session.industry}</p>
+            <p className="mt-3 text-sm leading-6 text-black/68">{graph.session.customerContext}</p>
+          </section>
+
+          <section className="rounded-sm border border-black/10 bg-white p-6">
+            <h2 className="font-semibold">Known pain</h2>
+            {graph.captures.length === 0 ? (
+              <p className="mt-3 text-sm text-black/55">Nothing captured yet.</p>
+            ) : (
+              <ul className="mt-3 space-y-3 text-sm">
+                {graph.captures.map((capture) => (
+                  <li key={capture.id}>
+                    <span className="font-medium">{capture.attributedTo}</span>
+                    <span className="text-black/62"> · {capture.text}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+
+        <div className="mt-6">
+          <Link href="/run" className={cn(buttonVariants({ className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" }))}>
+            Open the session <ArrowRight />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (viewer.actor === "cpm") {
     return (
       <div className="mx-auto max-w-6xl px-5 py-8 lg:px-8">
@@ -256,8 +299,6 @@ export default function ScopePage() {
             ) : null}
         />
       </div>
-
-      {lookupPanel}
 
       {mode === "seeded" ? (
         <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,24rem)]">

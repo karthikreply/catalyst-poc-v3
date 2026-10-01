@@ -11,6 +11,8 @@ import { patterns } from "@/lib/seed";
 import { hasCompleteCostComponents, hasCompleteValueInputs } from "@/lib/session";
 import {
   canViewOpportunityDetail,
+  isBookedOutcome,
+  liveSessionOutcome,
   mechanicConversion,
   recentTelemetryRows,
   scopeTelemetry,
@@ -26,6 +28,7 @@ const outcomeTone: Record<TelemetryOutcome, string> = {
   Run: "bg-sky-100 text-sky-900",
   "Hackathon proposed": "bg-amber-100 text-amber-900",
   "Hackathon booked": "bg-emerald-100 text-emerald-900",
+  "Pilot signed": "bg-emerald-200 text-emerald-950",
 };
 
 function OutcomeStatus({ outcome }: { outcome: TelemetryOutcome }) {
@@ -81,11 +84,7 @@ export default function TelemetryPage() {
       partner: brand.partnerName as TelemetrySession["partner"],
       industry: graph.session.industry,
       pattern,
-      outcome: graph.hackathon?.booked
-        ? "Hackathon booked"
-        : graph.session.scopeMode === "cold" && !hasSessionValue
-          ? "Scoped"
-          : "Hackathon proposed",
+      outcome: liveSessionOutcome(graph, hasSessionValue),
       fundedValue: 0,
       opportunityValue: hasSessionValue ? graph.outcome.annualValue : undefined,
       customer: graph.session.customerName,
@@ -108,10 +107,11 @@ export default function TelemetryPage() {
     ["Run", summary.sessionsRun],
     ["Hackathon proposed", summary.hackathonsProposed],
     ["Hackathon booked", summary.hackathonsBooked],
+    ["Pilot signed", summary.pilotsSigned],
   ] as [string, number][];
   const patternConversion = Object.fromEntries(
     countBy("pattern").map(([pattern, count]) => {
-      const booked = rows.filter((row) => row.pattern === pattern && row.outcome === "Hackathon booked").length;
+      const booked = rows.filter((row) => row.pattern === pattern && isBookedOutcome(row.outcome)).length;
       return [pattern, `${booked} booked of ${count}`];
     }),
   );
@@ -191,7 +191,7 @@ export default function TelemetryPage() {
 
       <section className="md-card-outlined mt-5 p-5">
         <h2 className="md-title-medium">Conversion funnel · scoped cohort n={rows.length}</h2>
-        <div className="mt-5 grid gap-2 md:grid-cols-4">
+        <div className="mt-5 grid gap-2 md:grid-cols-5">
           {funnel.map(([label, value], index) => (
             <div key={label} className="relative rounded-[var(--md-sys-shape-small)] border-l-4 border-[var(--md-sys-color-primary)] bg-[var(--md-sys-color-surface-container)] p-4" style={{ opacity: 1 - index * 0.08 }}>
               <p className="md-label-medium text-[var(--md-sys-color-on-surface-variant)]">{label}</p><p className="md-title-large mt-1">{value}</p>

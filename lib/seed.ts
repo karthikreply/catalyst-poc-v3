@@ -4,6 +4,14 @@ export type Mechanic = "value-sprint" | "ghost-ledger";
 export type CloseStyle = "owner-and-ask" | "board-slide";
 export type FieldSource = "partner-portal" | "crm" | "typed" | "inferred";
 export type ScopeMode = "seeded" | "cold";
+export type HandoffKind = "daf" | "pilot" | "pdm-notified";
+
+/** What the partner did with the session after the room: recorded once, never replaced. */
+export type Handoff = {
+  kind: HandoffKind;
+  at: string;
+  sponsor: string;
+};
 
 export type SolutionCandidate = {
   id: string;
@@ -12,6 +20,8 @@ export type SolutionCandidate = {
   valueAnchor: string;
   /** Gemini / Google Cloud products the solution uses in the demo. */
   products: string[];
+  /** Agenda step where the room named this solution; its latest capture is the pain line. */
+  stepId?: string;
 };
 
 export type RankingState = {
@@ -26,6 +36,8 @@ export type HackathonBooking = {
   partnerSpecialist: string;
   customerOwner: string;
   question: string;
+  /** Solution showcase, `YYYY-MM-DDTHH:MM`. Booking and hydrate default it to 14:00 on the third day. */
+  showcaseAt?: string;
   booked: boolean;
   /** Solution ids booked into the hackathon (exactly three when booked). */
   solutionIds: string[];
@@ -69,6 +81,8 @@ export type Session = {
   scopeMode: ScopeMode;
   /** Customer door: true once a format card has started the customer session. */
   customerFormatChosen?: boolean;
+  /** Partner's handoff after the session. Null until recorded. */
+  handoff: Handoff | null;
 };
 
 export type AgendaStep = {
@@ -117,6 +131,8 @@ export type Outcome = {
   nextStep: string;
   constraint: string;
   partiallyEstimated?: boolean;
+  /** Solution id the room names at the showcase as the six-week pilot. */
+  pilotPick: string | null;
 };
 
 export type Attendee = {
@@ -205,6 +221,7 @@ export const heartlandSolutions: SolutionCandidate[] = [
     outcome: "Pre-fill claim fields from PDFs so supervisors stop retyping every form.",
     valueAnchor: "$7.75M annual handling-cost opportunity at 400 claims/day",
     products: ["Gemini", "Document AI"],
+    stepId: "where-it-hurts",
   },
   {
     id: "sol-low-confidence-review",
@@ -212,6 +229,7 @@ export const heartlandSolutions: SolutionCandidate[] = [
     outcome: "Send only uncertain extractions to Michelle's team; keep the rest moving.",
     valueAnchor: "Protects the 15% Michelle flagged as the hard cases",
     products: ["Gemini", "Vertex AI"],
+    stepId: "constraints",
   },
   {
     id: "sol-handwriting-assist",
@@ -219,6 +237,7 @@ export const heartlandSolutions: SolutionCandidate[] = [
     outcome: "Surface margin notes that today's OCR drops so intake does not stall.",
     valueAnchor: "Closes the handwritten-notes gap named in the session",
     products: ["Gemini", "Document AI"],
+    stepId: "constraints",
   },
   {
     id: "sol-audit-trail",
@@ -226,6 +245,7 @@ export const heartlandSolutions: SolutionCandidate[] = [
     outcome: "Every automated assist leaves an evidence path compliance can review.",
     valueAnchor: "Unblocks Robert's audit-trail constraint on assisted extraction",
     products: ["Gemini", "Cloud Logging"],
+    stepId: "constraints",
   },
   {
     id: "sol-overtime-reduction",
@@ -233,6 +253,7 @@ export const heartlandSolutions: SolutionCandidate[] = [
     outcome: "Cut the overtime Heartland paid instead of hiring through Q1 volume.",
     valueAnchor: "$48k/month overtime named by Dana",
     products: ["Gemini", "Document AI"],
+    stepId: "where-it-hurts",
   },
   {
     id: "sol-rework-leakage",
@@ -240,6 +261,7 @@ export const heartlandSolutions: SolutionCandidate[] = [
     outcome: "Fewer reopened claims from incomplete first-pass extraction.",
     valueAnchor: "6% reopen rate × $210 each in the cost model",
     products: ["Gemini", "Vertex AI"],
+    stepId: "volume-and-cost",
   },
   {
     id: "sol-status-summary",
@@ -247,6 +269,7 @@ export const heartlandSolutions: SolutionCandidate[] = [
     outcome: "Give supervisors a one-screen status pull instead of chasing PDFs.",
     valueAnchor: "340 review hours/week at $61 loaded rate",
     products: ["Gemini", "Vertex AI Search"],
+    stepId: "volume-and-cost",
   },
 ];
 
@@ -295,6 +318,7 @@ export const initialSessionGraph: SessionGraph = {
     reusePriorPilotSpec: true,
     claimsVolumeChoice: null,
     scopeMode: "seeded",
+    handoff: null,
   },
   agenda: [
     ["where-it-hurts", "Where it hurts", "Walk me through what happens when a claim arrives.", 30, "done"],
@@ -376,6 +400,7 @@ export const initialSessionGraph: SessionGraph = {
     owner: "Alex Chen",
     nextStep: "3-day hackathon to scope a six-week pilot",
     constraint: "Human review on low-confidence extractions",
+    pilotPick: null,
   },
   solutions: heartlandSolutions,
   ranking: {

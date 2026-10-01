@@ -4,11 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Check, ChevronDown, Clipboard } from "lucide-react";
 
+import { CustomerAccountPending } from "@/components/customer-account-pending";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useSession } from "@/components/session-provider";
 import { UnavailableControl } from "@/components/unavailable-control";
 import { patterns } from "@/lib/seed";
-import { canFlagReferenceStory } from "@/lib/session";
+import { canFlagReferenceStory, customerHasAccount, pilotNextStepCopy, pilotPickTitle, pilotScopeLine } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 const enableList = `# Enable list — customer cloud account
@@ -33,6 +34,9 @@ export default function PilotSpecPage() {
   const { graph, brand, viewer } = useSession();
   const [copied, setCopied] = useState(false);
   const [briefCopied, setBriefCopied] = useState(false);
+  if (viewer.actor === "cpm" && !customerHasAccount(viewer.actor, graph)) {
+    return <CustomerAccountPending message="This is written once your account is in the session." />;
+  }
   const pattern = patterns.find((item) => item.id === graph.session.patternId)!;
   const compliancePerson = graph.attendees.find((attendee) => /compliance|risk|audit/i.test(attendee.role));
   const compliance = graph.captures.find((capture) => capture.attributedTo === compliancePerson?.name);
@@ -40,9 +44,11 @@ export default function PilotSpecPage() {
   const constraintAttribution = compliance && compliancePerson
     ? `${compliancePerson.name}, ${compliancePerson.role}`
     : "agreed in session · no named confirmer";
-  const useCase = graph.outcome.useCase || "Not captured";
+  // Once the room picks the pilot at the showcase, that solution is the use case.
+  const useCase = pilotPickTitle(graph) ?? (graph.outcome.useCase || "Not captured");
+  const scopeLine = pilotScopeLine(graph);
   const constraint = (compliance?.text ?? graph.outcome.constraint) || "Not captured";
-  const nextStep = graph.outcome.nextStep || "Not captured";
+  const nextStep = pilotNextStepCopy(graph) || "Not captured";
 
   async function copySnippet() {
     await navigator.clipboard.writeText(enableList);
@@ -57,6 +63,7 @@ export default function PilotSpecPage() {
       `Owner: ${owner}`,
       `Constraint: ${constraint}`,
       `Next step: ${nextStep}`,
+      ...(scopeLine ? [`Scope: ${scopeLine}`] : []),
       "",
       "Requirements:",
       ...services.map(([name, reason]) => `- ${name}: ${reason}`),
@@ -99,6 +106,7 @@ export default function PilotSpecPage() {
               ["Owner", owner],
               ["Constraint", constraint === "Not captured" ? constraint : `${constraint} (${constraintAttribution})`],
               ["Next step", nextStep],
+              ...(scopeLine ? [["Scope", scopeLine]] : []),
               ...(graph.session.reusePriorPilotSpec == null
                 ? []
                 : [[

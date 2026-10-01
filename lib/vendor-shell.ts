@@ -2,6 +2,7 @@ import type { Actor } from "./seed";
 
 export const vendorNavItems = [
   { label: "Dashboard", href: "/", illustrative: false },
+  { label: "My sessions", href: "/sessions", illustrative: false },
   { label: "Programs", href: null, illustrative: true },
   { label: "Value sessions", href: "/scope", illustrative: false },
   { label: "Funding", href: "/funding", illustrative: false },
@@ -11,7 +12,7 @@ export const vendorNavItems = [
 
 export type VendorNavItem = {
   label: (typeof vendorNavItems)[number]["label"];
-  href: "/" | "/customer" | "/scope" | "/funding" | "/telemetry" | null;
+  href: "/" | "/customer" | "/sessions" | "/scope" | "/funding" | "/telemetry" | null;
   illustrative: boolean;
 };
 
@@ -46,6 +47,7 @@ export function mergesSessionHeader(pathname: string) {
 export function breadcrumbForPath(pathname: string, actor: Actor) {
   const root = actor === "cpm" ? "Your engagement" : "Partner network";
   if (pathname === "/") return [root, "Dashboard"];
+  if (pathname.startsWith("/sessions")) return [root, "My sessions"];
   if (pathname.startsWith("/funding")) return [root, "Funding"];
   if (pathname.startsWith("/telemetry")) return [root, "Telemetry"];
   if (pathname.startsWith("/customer")) return [root, "Customer"];

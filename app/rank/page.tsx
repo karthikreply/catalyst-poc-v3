@@ -1,16 +1,14 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowRight, ArrowUp, Lock, Unlock } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { HackathonThreeDays } from "@/components/hackathon-three-days";
 import { useSession } from "@/components/session-provider";
-import type { HackathonBooking, SessionGraph } from "@/lib/seed";
 import {
   bookedSolutionTitles,
-  defaultHackathonDraft,
+  canBookHackathon,
   latestStepCapture,
   rankedSolutions,
   selectedSolutions,
@@ -27,7 +25,6 @@ export default function RankPage() {
     toggleSelected,
     lockRanking,
     unlockRanking,
-    bookHackathon,
     castVote,
   } = useSession();
   const ordered = rankedSolutions(graph);
@@ -38,9 +35,9 @@ export default function RankPage() {
   const coldSample = graph.session.scopeMode === "cold";
   const tallies = voteTallies(graph);
   const canSelectMore = selectedCount < 3;
-  const showBooking = selectedCount === 3 || booked;
   const canSelect = canEditSession || viewer.actor === "cpm";
   const canReorder = canEditSession;
+  const mayBook = canBookHackathon(viewer.actor);
   const customerViewer = viewer.actor === "cpm";
   const latestCapture = customerViewer ? latestStepCapture(graph) : null;
   const topThreeTitles = Array.isArray(graph.ranking.selected) && graph.ranking.selected.length
@@ -57,22 +54,32 @@ export default function RankPage() {
               {coldSample ? "Sample shortlist, not this account's case" : "Rank solutions"}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-black/58">
-              Prepared shortlist for the claims case. Rank after pain and value are captured. Choose three to book into the hackathon.
+              Prepared shortlist for the claims case. Rank after pain and value are captured. Choose three.
+              {mayBook ? " Booking the hackathon is the next action." : " The partner books the hackathon."}
               {coldSample && (
                 <span className="mt-1 block text-xs text-amber-900">
                   Sample figures from the Heartland case, not from {graph.session.customerName}.
                 </span>
               )}
             </p>
+            {booked && (
+              <p role="status" className="mt-2 text-sm font-medium text-black">Booked · {graph.hackathon?.date}</p>
+            )}
           </div>
           {booked ? (
             <Link href="/artifact" className={buttonVariants({ className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>
               Open business case <ArrowRight />
             </Link>
+          ) : selectedCount === 3 && mayBook ? (
+            <Link href="/artifact" className={buttonVariants({ className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>
+              Book the hackathon <ArrowRight />
+            </Link>
           ) : (
-            <Button type="button" disabled className="opacity-50">Open business case</Button>
+            <Button type="button" disabled className="opacity-50">Book the hackathon</Button>
           )}
         </div>
+
+        {booked && <HackathonThreeDays graph={graph} className="mt-8" />}
 
         <section className="mt-8 rounded-sm border border-black/10 bg-white p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -101,7 +108,7 @@ export default function RankPage() {
           </div>
           {selectedCount !== 3 && !booked && (
             <p className="mt-3 text-xs text-black/48">
-              Choose three to book.
+              Choose three.
               {canSelect && !locked ? (
                 <span className="mt-1 block">Choose three before locking</span>
               ) : null}
@@ -217,166 +224,7 @@ export default function RankPage() {
             <p className="mt-5 text-sm text-black/62">Here is what the session produced. What would you like to do with it?</p>
           )}
         </section>
-
-        {showBooking && (
-          <HackathonBookingForm
-            key={`${graph.ranking.selected.join("-")}-${booked ? "booked" : "draft"}`}
-            graph={graph}
-            selectedTitles={booked ? bookedSolutionTitles(graph) : selected.map((solution) => solution.title)}
-            canEditSession={canSelect}
-            booked={booked}
-            selectedCount={selectedCount}
-            bookHackathon={bookHackathon}
-          />
-        )}
       </div>
     </div>
-  );
-}
-
-function HackathonBookingForm({
-  graph,
-  selectedTitles,
-  canEditSession,
-  booked,
-  selectedCount,
-  bookHackathon,
-}: {
-  graph: SessionGraph;
-  selectedTitles: string[];
-  canEditSession: boolean;
-  booked: boolean;
-  selectedCount: number;
-  bookHackathon: (draft: Omit<HackathonBooking, "booked" | "solutionIds" | "calendarAdded" | "meetAdded">) => void;
-}) {
-  const [draft, setDraft] = useState(() => {
-    const base = graph.hackathon ?? defaultHackathonDraft(graph);
-    return {
-      date: base.date,
-      googleFacilitator: base.googleFacilitator,
-      partnerSpecialist: base.partnerSpecialist,
-      customerOwner: base.customerOwner,
-      question: base.question,
-    };
-  });
-  const fieldsReady =
-    draft.date.trim()
-    && draft.googleFacilitator.trim()
-    && draft.partnerSpecialist.trim()
-    && draft.customerOwner.trim()
-    && draft.question.trim();
-  const canBook = canEditSession && !booked && selectedCount === 3 && Boolean(fieldsReady);
-
-  return (
-    <section className="mt-5 rounded-sm border border-black/10 bg-white p-6">
-      <h2 className="text-lg font-semibold text-black">Book the three-day hackathon</h2>
-      <p className="mt-2 text-sm leading-6 text-black/75">
-        The three days scope a six-week pilot on these solutions.
-      </p>
-      <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-black/85">
-        {selectedTitles.map((title) => (
-          <li key={title}>{title}</li>
-        ))}
-      </ul>
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <label className="grid gap-1.5 text-sm">
-          <span className="text-xs font-medium text-black/70">Hackathon date</span>
-          {booked ? (
-            <p className="rounded-sm border border-black/15 bg-[#fafaf8] px-3 py-2 text-sm font-medium text-black">{draft.date}</p>
-          ) : (
-            <Input
-              type="date"
-              value={draft.date}
-              disabled={!canEditSession}
-              onChange={(event) => setDraft((current) => ({ ...current, date: event.target.value }))}
-              aria-label="Hackathon date"
-            />
-          )}
-        </label>
-        <label className="grid gap-1.5 text-sm sm:col-span-2">
-          <span className="text-xs font-medium text-black/70">Question the hackathon must answer</span>
-          {booked ? (
-            <p className="rounded-sm border border-black/15 bg-[#fafaf8] px-3 py-2 text-sm leading-6 text-black">{draft.question}</p>
-          ) : (
-            <Input
-              value={draft.question}
-              disabled={!canEditSession}
-              onChange={(event) => setDraft((current) => ({ ...current, question: event.target.value }))}
-              aria-label="Question the hackathon must answer"
-            />
-          )}
-        </label>
-        <label className="grid gap-1.5 text-sm">
-          <span className="text-xs font-medium text-black/70">Google facilitator</span>
-          {booked ? (
-            <p className="rounded-sm border border-black/15 bg-[#fafaf8] px-3 py-2 text-sm font-medium text-black">{draft.googleFacilitator}</p>
-          ) : (
-            <Input
-              value={draft.googleFacilitator}
-              disabled={!canEditSession}
-              onChange={(event) => setDraft((current) => ({ ...current, googleFacilitator: event.target.value }))}
-              aria-label="Google facilitator"
-            />
-          )}
-        </label>
-        <label className="grid gap-1.5 text-sm">
-          <span className="text-xs font-medium text-black/70">Partner specialist</span>
-          {booked ? (
-            <p className="rounded-sm border border-black/15 bg-[#fafaf8] px-3 py-2 text-sm font-medium text-black">{draft.partnerSpecialist}</p>
-          ) : (
-            <Input
-              value={draft.partnerSpecialist}
-              disabled={!canEditSession}
-              onChange={(event) => setDraft((current) => ({ ...current, partnerSpecialist: event.target.value }))}
-              aria-label="Partner specialist"
-            />
-          )}
-        </label>
-        <label className="grid gap-1.5 text-sm sm:col-span-2">
-          <span className="text-xs font-medium text-black/70">Customer owner</span>
-          {booked ? (
-            <p className="rounded-sm border border-black/15 bg-[#fafaf8] px-3 py-2 text-sm font-medium text-black">{draft.customerOwner}</p>
-          ) : (
-            <Input
-              value={draft.customerOwner}
-              disabled={!canEditSession}
-              onChange={(event) => setDraft((current) => ({ ...current, customerOwner: event.target.value }))}
-              aria-label="Customer owner"
-            />
-          )}
-        </label>
-      </div>
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        {booked ? (
-          <>
-            <p role="status" className="text-sm font-medium text-black">Booked · {graph.hackathon?.date}</p>
-            <Link
-              href="/artifact"
-              className={buttonVariants({ className: "inline-flex gap-2 bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}
-            >
-              Open business case <ArrowRight className="size-4" />
-            </Link>
-            <p className="w-full text-sm leading-6 text-black/75">
-              Google Cloud and Workspace products for the three days are on the business case.
-            </p>
-          </>
-        ) : (
-          <>
-            <Button
-              type="button"
-              disabled={!canBook}
-              title={selectedCount !== 3 ? "Choose three to book." : undefined}
-              className="bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]"
-              onClick={() => bookHackathon(draft)}
-            >
-              Book hackathon
-            </Button>
-            {selectedCount !== 3 && (
-              <p className="text-sm text-black/70">Choose three to book.</p>
-            )}
-          </>
-        )}
-      </div>
-    </section>
   );
 }

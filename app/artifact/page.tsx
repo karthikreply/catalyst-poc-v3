@@ -5,8 +5,11 @@ import { ArrowRight, Download } from "lucide-react";
 import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
 
+import { CustomerAccountPending } from "@/components/customer-account-pending";
+import { HackathonBookingForm } from "@/components/hackathon-booking-form";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { GoogleHackathonStack } from "@/components/google-hackathon-stack";
+import { HackathonThreeDays } from "@/components/hackathon-three-days";
 import { UnavailableControl } from "@/components/unavailable-control";
 import { useSession } from "@/components/session-provider";
 import { withBrandPeople } from "@/lib/brands";
@@ -24,7 +27,12 @@ import {
   fundingAskCopy,
   hasCompleteCostComponents,
   bookedSolutionTitles,
+  canBookHackathon,
   catalogSolutionById,
+  customerHasAccount,
+  pilotNextStepCopy,
+  pilotPickTitle,
+  selectedSolutions,
 } from "@/lib/session";
 
 function componentArithmetic(component: CostComponent) {
@@ -51,7 +59,10 @@ function componentArithmetic(component: CostComponent) {
 }
 
 export default function ArtifactPage() {
-  const { graph, brand, viewer } = useSession();
+  const { graph, brand, viewer, canEditSession, bookHackathon } = useSession();
+  if (viewer.actor === "cpm" && !customerHasAccount(viewer.actor, graph)) {
+    return <CustomerAccountPending message="This is written once your account is in the session." />;
+  }
   const people = withBrandPeople(brand);
   const claimsCopy = claimsArtifactCopy(graph);
   const problemQuotes = (graph.session.scopeMode === "cold"
@@ -127,7 +138,7 @@ export default function ArtifactPage() {
 
       <div className="sticky top-16 z-20 -mx-5 border-y border-black/10 bg-white/95 px-5 py-3 backdrop-blur lg:-mx-8 lg:px-8">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-3">
-          {viewer.actor === "partner" && selfService ? (
+          {viewer.actor === "partner" && selfService && actions.primary ? (
             <>
               <UnavailableControl
                 label={actions.primary}
@@ -136,7 +147,7 @@ export default function ArtifactPage() {
               />
               <Link href="/funding" className={buttonVariants({ variant: "outline" })}>{actions.secondary}</Link>
             </>
-          ) : (
+          ) : actions.primary ? (
             <>
               <Link href="/funding" className={buttonVariants({ className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>{actions.primary}</Link>
               {actions.secondary && (
@@ -147,7 +158,7 @@ export default function ArtifactPage() {
                 />
               )}
             </>
-          )}
+          ) : null}
           {actions.tertiary && (
             <UnavailableControl
               label={actions.tertiary}
@@ -161,6 +172,24 @@ export default function ArtifactPage() {
         </div>
       </div>
 
+      {!graph.hackathon?.booked && graph.ranking.selected.length === 3 && canBookHackathon(viewer.actor) && (
+        <HackathonBookingForm
+          key={graph.ranking.selected.join("-")}
+          graph={graph}
+          selectedTitles={selectedSolutions(graph).map((solution) => solution.title)}
+          canEdit={canEditSession || viewer.actor === "cpm"}
+          bookHackathon={bookHackathon}
+        />
+      )}
+      {!graph.hackathon?.booked && graph.ranking.selected.length === 3 && !canBookHackathon(viewer.actor) && (
+        <section className="mx-auto mt-5 max-w-4xl rounded-sm border border-black/10 bg-white p-6" aria-label="Hackathon booking">
+          <h2 className="text-lg font-semibold text-black">Hackathon</h2>
+          <p className="mt-2 text-sm leading-6 text-black/70">
+            The partner books the hackathon from these three. A PDM does not book it.
+          </p>
+        </section>
+      )}
+
       {graph.hackathon?.booked ? (
         <div className="mx-auto mt-5 max-w-4xl space-y-4">
           <div className="rounded-sm border border-black/20 bg-white px-4 py-4 text-sm text-black" role="status">
@@ -170,9 +199,10 @@ export default function ArtifactPage() {
             </p>
             <p className="mt-2 text-sm leading-6 text-black/75">{graph.hackathon.question}</p>
           </div>
+          <HackathonThreeDays graph={graph} />
           <GoogleHackathonStack graph={graph} />
         </div>
-      ) : !selfService && viewer.actor === "partner" ? (
+      ) : !selfService && viewer.actor === "partner" && graph.ranking.selected.length !== 3 ? (
         <div className="mx-auto mt-5 flex max-w-4xl flex-wrap items-center justify-between gap-3 rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <p>No hackathon booked yet. Rank the shortlist and put a date on the calendar before funding.</p>
           <Link href="/rank" className={buttonVariants({ size: "sm", className: "bg-[var(--brand-accent)] hover:bg-[var(--brand-accent-dark)]" })}>
@@ -333,6 +363,7 @@ export default function ArtifactPage() {
             <dl className="mt-4 grid gap-px overflow-hidden rounded-sm border border-black/10 bg-black/10 sm:grid-cols-2">
               {[
                 ["Pilot scope", artifactPilotScopeCopy(graph, brand)],
+                ...(pilotPickTitle(graph) ? [["Next step", pilotNextStepCopy(graph)]] : []),
                 ["Pilot duration", "Six weeks"],
                 ["Owner", graph.outcome.owner ?? "Not confirmed"],
                 ["Success", "Process 500 anonymised claims with an audit trail and human review for low-confidence fields"],

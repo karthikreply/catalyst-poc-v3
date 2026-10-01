@@ -40,6 +40,8 @@ describe("app shell navigation", () => {
     expect(markup).toContain('href="/funding"');
     expect(markup).toContain("Your engagement");
     expect(markup).not.toContain('href="/telemetry"');
+    expect(markup).not.toContain('href="/sessions"');
+    expect(markup).not.toContain("My sessions");
     expect(markup).not.toContain("Programs");
     expect(markup).not.toContain("Support");
     expect(markup).not.toContain("Telemetry");
@@ -49,6 +51,8 @@ describe("app shell navigation", () => {
     for (const actor of ["partner", "pdm"]) {
       const markup = shellMarkup(actor);
       expect(markup).toContain('href="/"');
+      expect(markup).toContain('href="/sessions"');
+      expect(markup).toContain("My sessions");
       expect(markup).toContain('href="/telemetry"');
       expect(markup).toContain("Programs");
       expect(markup).toContain("Support");
@@ -57,7 +61,7 @@ describe("app shell navigation", () => {
     }
   });
 
-  it("routes the dropdown to the customer home or the program dashboard", () => {
+  it("routes the dropdown to the customer home or my sessions", () => {
     const setActor = sessionFor("partner");
     const view = render(<AppShell><p>body</p></AppShell>);
     fireEvent.change(view.getByLabelText("Viewing as"), { target: { value: "cpm" } });
@@ -69,10 +73,10 @@ describe("app shell navigation", () => {
     view.rerender(<AppShell><p>body</p></AppShell>);
     fireEvent.change(view.getByLabelText("Viewing as"), { target: { value: "partner" } });
     expect(setPartner).toHaveBeenCalledWith("partner");
-    expect(push).toHaveBeenCalledWith("/");
+    expect(push).toHaveBeenCalledWith("/sessions");
 
     push.mockClear();
     fireEvent.change(view.getByLabelText("Viewing as"), { target: { value: "pdm" } });
-    expect(push).toHaveBeenLastCalledWith("/");
+    expect(push).toHaveBeenLastCalledWith("/sessions");
   });
 });

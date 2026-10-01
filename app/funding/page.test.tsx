@@ -33,4 +33,18 @@ describe("exact claims provenance", () => {
       "Volume entered by partner in Scope · not respondent-confirmed",
     );
   });
+
+  it("withholds the seeded case from a customer who has no account", () => {
+    useSessionMock.mockReturnValue({
+      graph: initialSessionGraph,
+      brand: brands.cdw,
+      viewer: { actor: "cpm", name: "Marcus Hale", org: "Platform vendor" },
+    });
+
+    const markup = renderToStaticMarkup(<FundingPage />);
+    expect(markup).toContain("This is written once your account is in the session.");
+    expect(markup).toContain('href="/scope"');
+    expect(markup).not.toContain("Heartland");
+    expect(markup).not.toContain("Start DAF funding request");
+  });
 });

@@ -14,8 +14,54 @@ export function ValueSprintPanel() {
     ? calculateDailyValue(claims.quantity!, delay.quantity!, handling.quantity!)
     : null;
   const selfService = graph.session.delivery === "self-service";
+  const customer = viewer.actor === "cpm";
   const attendeeNames = new Set(graph.attendees.map((attendee) => attendee.name));
   const InputRow = selfService ? "div" : "label";
+
+  if (customer) {
+    return (
+      <div className="mt-7 rounded-sm border border-black/10 bg-white p-6 lg:p-8">
+        <p className="text-sm font-medium text-black/50">Agreed cost of avoidable delay</p>
+        {dailyValue === null ? (
+          <div className="mt-4">
+            <p className="text-xl font-semibold">Value inputs not captured yet</p>
+            <p className="mt-2 max-w-md text-sm leading-6 text-black/55">Add all three inputs to calculate daily and annual value.</p>
+          </div>
+        ) : (
+          <>
+            <div key={dailyValue} className="value-flash mt-2 inline-block rounded-sm px-1 text-5xl font-semibold tracking-[-0.05em] md:text-6xl">
+              {formatCurrency(dailyValue)}
+              <span className="ml-1 text-xl tracking-normal text-black/45">/day</span>
+            </div>
+            <p className="mt-3 text-sm text-black/55">{formatCurrency(graph.outcome.annualValue)} per year at 250 working days</p>
+          </>
+        )}
+        {selfService && <p className="mt-1 text-sm font-medium text-amber-800">Unverified estimate</p>}
+        <div className="mt-6 grid gap-4 sm:grid-cols-3">
+          {graph.valueInputs.map((input) => (
+            <label key={input.id} className="text-sm font-medium">
+              {input.label}
+              <span className="mt-2 flex items-center rounded-sm border border-black/15 bg-white px-2 font-normal focus-within:border-[var(--brand-accent)] focus-within:ring-2 focus-within:ring-[color-mix(in_srgb,var(--brand-accent)_15%,transparent)]">
+                {input.id === "handling" && <span className="text-black/45">$</span>}
+                <input
+                  aria-label={input.label}
+                  type="number"
+                  readOnly={!canEditSession}
+                  value={input.quantity ?? ""}
+                  step={input.id === "handling" ? "0.25" : "1"}
+                  onChange={(event) => updateValue(input.id, event.target.value === "" ? null : Number(event.target.value))}
+                  className="min-w-0 flex-1 bg-transparent px-1 py-2 text-right font-semibold tabular-nums outline-none"
+                />
+              </span>
+            </label>
+          ))}
+        </div>
+        {!canEditSession && (
+          <p className="mt-3 text-xs text-black/48">Completed-session evidence shared by the partner; editing remains partner-owned.</p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mt-7 grid gap-px overflow-hidden rounded-sm border border-black/10 bg-black/10 lg:grid-cols-[1.2fr_.8fr]">
@@ -88,9 +134,6 @@ export function ValueSprintPanel() {
             </InputRow>
           ))}
         </div>
-        {viewer.actor === "cpm" && !canEditSession && (
-          <p className="mt-3 text-xs text-black/48">Completed-session evidence shared by the partner; editing remains partner-owned.</p>
-        )}
       </div>
     </div>
   );

@@ -15,6 +15,8 @@ import {
   type ColdAttendee,
   type ColdCompany,
   type Delivery,
+  type Handoff,
+  type HandoffKind,
   type Mechanic,
   type PartnerNote,
   type Session,
@@ -58,6 +60,7 @@ export function withSolutionProducts(solutions: SolutionCandidate[]): SolutionCa
       outcome: solution.outcome || seeded?.outcome || "",
       valueAnchor: solution.valueAnchor || seeded?.valueAnchor || "",
       products,
+      stepId: solution.stepId ?? seeded?.stepId,
     };
   });
 }
@@ -140,6 +143,19 @@ function latestPartnerNote(notes: PartnerNote[]) {
   }, null);
 }
 
+const handoffKinds: HandoffKind[] = ["daf", "pilot", "pdm-notified"];
+
+function hydrateHandoff(value: unknown): Handoff | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<Handoff>;
+  if (!handoffKinds.includes(candidate.kind as HandoffKind)) return null;
+  return {
+    kind: candidate.kind as HandoffKind,
+    at: typeof candidate.at === "string" ? candidate.at : "",
+    sponsor: typeof candidate.sponsor === "string" ? candidate.sponsor : "",
+  };
+}
+
 export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
   if (!value?.session) return initialSessionGraph;
   const cold = value.session.scopeMode === "cold";
@@ -153,6 +169,7 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
         state: index === 0 ? "active" as const : "upcoming" as const,
       }))
     : value.agenda ?? initialSessionGraph.agenda;
+  const pilotPick = typeof value.outcome?.pilotPick === "string" ? value.outcome.pilotPick : null;
   const outcome = legacyCold
     ? {
         ...initialSessionGraph.outcome,
@@ -163,8 +180,9 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
         nextStep: "",
         constraint: "",
         partiallyEstimated: true,
+        pilotPick: null,
       }
-    : { ...initialSessionGraph.outcome, ...value.outcome, sessionId };
+    : { ...initialSessionGraph.outcome, ...value.outcome, sessionId, pilotPick };
   return {
     ...initialSessionGraph,
     ...value,
@@ -174,6 +192,7 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
       id: sessionId,
       reusePriorPilotSpec: value.session.reusePriorPilotSpec ?? (cold ? null : true),
       ...(value.session.customerFormatChosen ? { customerFormatChosen: true } : {}),
+      handoff: hydrateHandoff(value.session.handoff),
     },
     valueInputs: legacyCold
       ? emptyValueInputs(sessionId)
@@ -210,6 +229,7 @@ export function hydrateSessionGraph(value: SessionGraph | null): SessionGraph {
       ? {
           ...value.hackathon,
           solutionIds: Array.isArray(value.hackathon.solutionIds) ? value.hackathon.solutionIds : [],
+          showcaseAt: value.hackathon.showcaseAt?.trim() || defaultShowcaseAt(value.hackathon.date ?? ""),
           calendarAdded: Boolean(value.hackathon.calendarAdded),
           meetAdded: Boolean(value.hackathon.meetAdded),
         }
@@ -273,6 +293,7 @@ export function applyColdScope(
       nextStep: enteringCold ? "" : graph.outcome.nextStep,
       constraint: enteringCold ? "" : graph.outcome.constraint,
       partiallyEstimated: true,
+      pilotPick: enteringCold ? null : graph.outcome.pilotPick,
     },
     attendees: attendees.filter((person) => person.name.trim() && person.role.trim()).map((person, index) => {
       const match = matchedColdRole(person.role);
@@ -426,11 +447,17 @@ export function updateValueConfirmer(
 }
 
 export function applyMechanic(graph: SessionGraph, mechanic: Mechanic): SessionGraph {
+  // Once the hackathon is booked the mechanic is settled.
+  if (graph.hackathon?.booked) return graph;
+  // A partner-led session only moves to the ledger once the value inputs exist.
+  // The customer door flips to self-service first, so it can still choose the ledger and enter the numbers there.
+  if (mechanic === "ghost-ledger" && graph.session.delivery !== "self-service" && !hasCompleteValueInputs(graph)) {
+    return graph;
+  }
   const next = bindAnnualValue({
     ...graph,
     session: { ...graph.session, mechanic, ledgerFrozen: false },
   });
-  if (graph.hackathon?.booked) return next;
   const allowed = new Set(solutionIdsForMechanic(mechanic));
   return {
     ...next,
@@ -443,6 +470,7 @@ export function applyMechanic(graph: SessionGraph, mechanic: Mechanic): SessionG
 
 /** Customer door: choosing a format starts the customer's own session on the one graph. */
 export function chooseCustomerFormat(graph: SessionGraph, mechanic: Mechanic): SessionGraph {
+  if (graph.hackathon?.booked) return graph;
   const next = applyMechanic(applyDeliveryMode(graph, "self-service"), mechanic);
   const firstChoice = !graph.session.customerFormatChosen;
   return {
@@ -477,6 +505,11 @@ export type CustomerHomeSummary = {
   continueHref: "/scope" | "/run" | null;
 };
 
+/** The customer has named a company in cold scope. A seeded graph is not their account. */
+export function customerHasAccount(actor: Actor, graph: SessionGraph) {
+  return actor === "cpm" && graph.session.scopeMode === "cold" && graph.session.customerName.trim().length > 0;
+}
+
 /** This engagement only. Never treats the seeded Heartland graph as the customer's session. */
 export function customerHomeSummary(graph: SessionGraph, partnerName: string): CustomerHomeSummary {
   const started = Boolean(graph.session.customerFormatChosen);
@@ -488,7 +521,7 @@ export function customerHomeSummary(graph: SessionGraph, partnerName: string): C
     started,
     company,
     format: started ? customerFormatLabels[graph.session.mechanic] : null,
-    stage: !started ? "Not started" : activeStep ? activeStep.title : "Scope",
+    stage: !started ? "Not started" : pilotPickTitle(graph) ? "Pilot scoped" : activeStep ? activeStep.title : "Scope",
     partner: partnerName,
     annualValue,
     funding: fundingRouteLabel(graph.session.fundingRoute),
@@ -596,6 +629,11 @@ export function isSessionReadOnly(actor: Actor, graph: SessionGraph) {
 
 export function canViewPartnerScope(actor: Actor) {
   return actor === "partner" || actor === "pdm";
+}
+
+/** The partner or the customer books the three days. The PDM reviews the shortlist. */
+export function canBookHackathon(actor: Actor) {
+  return actor === "partner" || actor === "cpm";
 }
 
 export function bindAnnualValue(graph: SessionGraph): SessionGraph {
@@ -765,6 +803,9 @@ export function artifactActions(actor: Actor, qualified: boolean, delivery: Deli
       tertiary: "Contact my partner manager with this business case",
     };
   }
+  if (actor === "cpm") {
+    return { primary: null, secondary: null, tertiary: null };
+  }
   return {
     primary: "Review funding request",
     secondary: null,
@@ -903,13 +944,93 @@ export function hackathonGoogleStack(graph: SessionGraph): GoogleStackItem[] {
   return items;
 }
 
-function formatCalendarDay(isoDate: string, dayOffset = 0): string {
+function shiftIsoDate(isoDate: string, dayOffset: number): string {
   const [year, month, day] = isoDate.split("-").map(Number);
   const date = new Date(Date.UTC(year, month - 1, day + dayOffset));
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, "0");
   const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}${m}${d}`;
+  return `${y}-${m}-${d}`;
+}
+
+function formatCalendarDay(isoDate: string, dayOffset = 0): string {
+  return shiftIsoDate(isoDate, dayOffset).replaceAll("-", "");
+}
+
+/** Solution showcase default: 14:00 on the third day of the hackathon. Empty when no date. */
+export function defaultShowcaseAt(hackathonDate: string): string {
+  const date = hackathonDate.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return "";
+  return `${shiftIsoDate(date, 2)}T14:00`;
+}
+
+/** "2026-10-16T14:00" → "2026-10-16 · 14:00" for the dashboard. */
+export function showcaseLabel(showcaseAt: string): string {
+  const [date, time] = showcaseAt.split("T");
+  return time ? `${date} · ${time}` : showcaseAt;
+}
+
+export type BookedSolutionPain = { id: string; title: string; pain: string };
+
+/**
+ * The three booked titles with the pain line each answers: the latest capture on the
+ * session step that named the solution, else the solution's outcome line.
+ */
+export function bookedSolutionPains(graph: SessionGraph): BookedSolutionPain[] {
+  return (graph.hackathon?.solutionIds ?? []).flatMap((id) => {
+    const solution = catalogSolutionById(id, graph);
+    if (!solution) return [];
+    const latest = graph.captures
+      .filter((capture) => capture.stepId === solution.stepId)
+      .sort((a, b) => Date.parse(b.capturedAt) - Date.parse(a.capturedAt))[0];
+    return [{ id, title: solution.title, pain: latest?.text ?? solution.outcome }];
+  });
+}
+
+/** Title of the solution named as the six-week pilot at the showcase. Null until picked. */
+export function pilotPickTitle(graph: SessionGraph): string | null {
+  const pick = graph.outcome.pilotPick;
+  if (!pick || !graph.hackathon?.booked || !graph.hackathon.solutionIds.includes(pick)) return null;
+  return catalogSolutionById(pick, graph)?.title ?? null;
+}
+
+/** Partner or customer names one of the three as the pilot. Choosing again replaces it. */
+export function setPilotPick(graph: SessionGraph, solutionId: string): SessionGraph {
+  if (!graph.hackathon?.booked || !graph.hackathon.solutionIds.includes(solutionId)) return graph;
+  if (graph.outcome.pilotPick === solutionId) return graph;
+  return { ...graph, outcome: { ...graph.outcome, pilotPick: solutionId } };
+}
+
+/** Partner records what happened after the room, once. A second call returns the same graph. */
+export function recordHandoff(graph: SessionGraph, kind: HandoffKind): SessionGraph {
+  if (graph.session.handoff) return graph;
+  const sponsor = graph.outcome.owner ?? customerSponsor(graph)?.name ?? "";
+  return {
+    ...graph,
+    session: {
+      ...graph.session,
+      handoff: { kind, at: new Date().toISOString(), sponsor },
+    },
+  };
+}
+
+export function handoffLabel(handoff: Handoff | null) {
+  if (!handoff) return "Not yet handed off";
+  if (handoff.kind === "daf") return "DAF with the partner";
+  if (handoff.kind === "pilot") return "Pilot filed";
+  return "PDM notified";
+}
+
+/** Business-case next step: the picked pilot once named, otherwise the session's own line. */
+export function pilotNextStepCopy(graph: SessionGraph): string {
+  const title = pilotPickTitle(graph);
+  return title ? `Six-week pilot on ${title}` : graph.outcome.nextStep;
+}
+
+/** Pilot-spec scope line once the room has picked. Null until then. */
+export function pilotScopeLine(graph: SessionGraph): string | null {
+  const title = pilotPickTitle(graph);
+  return title ? `Six-week pilot on ${title}, scoped in the three-day hackathon.` : null;
 }
 
 /** Google Calendar template URL (no OAuth). Empty when the hackathon is not booked. */
@@ -926,6 +1047,7 @@ export function googleCalendarComposeUrl(graph: SessionGraph, partnerName?: stri
     `Google facilitator: ${booking.googleFacilitator}`,
     `Partner specialist: ${booking.partnerSpecialist}`,
     `Customer owner: ${booking.customerOwner}`,
+    ...(booking.showcaseAt ? [`Showcase: ${booking.showcaseAt}`] : []),
     "",
     "Join with Google Meet — scheduled by the facilitator.",
     "These three days run on Google Cloud and Workspace.",
@@ -1117,6 +1239,7 @@ export function defaultHackathonDraft(graph: SessionGraph): HackathonBooking {
     question: titles.length === 3
       ? `Can we prove ${titles.join("; ")} on Heartland's own forms in three days?`
       : "Can we prove the three selected solutions on Heartland's own forms in three days?",
+    showcaseAt: "",
     booked: false,
     solutionIds: [],
     calendarAdded: false,
@@ -1124,10 +1247,10 @@ export function defaultHackathonDraft(graph: SessionGraph): HackathonBooking {
   };
 }
 
-export function bookHackathon(
-  graph: SessionGraph,
-  draft: Omit<HackathonBooking, "booked" | "solutionIds" | "calendarAdded" | "meetAdded">,
-): SessionGraph {
+/** Booking form input. `showcaseAt` falls back to the afternoon of the third day. */
+export type HackathonDraft = Omit<HackathonBooking, "booked" | "solutionIds" | "calendarAdded" | "meetAdded">;
+
+export function bookHackathon(graph: SessionGraph, draft: HackathonDraft): SessionGraph {
   if (graph.ranking.selected.length !== 3) return graph;
   const date = draft.date.trim();
   const googleFacilitator = draft.googleFacilitator.trim();
@@ -1137,6 +1260,7 @@ export function bookHackathon(
   if (!date || !googleFacilitator || !partnerSpecialist || !customerOwner || !question) return graph;
   const solutionIds = graph.ranking.order.filter((id) => graph.ranking.selected.includes(id));
   if (solutionIds.length !== 3) return graph;
+  const showcaseAt = draft.showcaseAt?.trim() || defaultShowcaseAt(date);
   return {
     ...graph,
     ranking: { ...graph.ranking, locked: true },
@@ -1146,6 +1270,7 @@ export function bookHackathon(
       partnerSpecialist,
       customerOwner,
       question,
+      showcaseAt,
       booked: true,
       solutionIds,
       calendarAdded: false,
@@ -1155,6 +1280,7 @@ export function bookHackathon(
       ...graph.outcome,
       nextStep: `3-day hackathon on ${date} to scope a six-week pilot`,
       owner: customerOwner,
+      pilotPick: null,
     },
     session: {
       ...graph.session,

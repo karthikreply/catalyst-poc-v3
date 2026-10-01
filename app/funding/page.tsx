@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, FileCheck2, LockKeyhole } from "lucide-react";
 
+import { CustomerAccountPending } from "@/components/customer-account-pending";
 import { buttonVariants } from "@/components/ui/button";
 import { useSession } from "@/components/session-provider";
 import { withBrandPeople } from "@/lib/brands";
@@ -10,6 +11,7 @@ import { ledgerAnnualTotal } from "@/lib/cost-model";
 import {
   claimsArtifactCopy,
   claimsVolumeProvenanceCopy,
+  customerHasAccount,
   hasCompleteCostComponents,
   hasCompleteValueInputs,
 } from "@/lib/session";
@@ -39,6 +41,9 @@ function useFundingData() {
 
 export default function FundingPage() {
   const data = useFundingData();
+  if (data.viewer.actor === "cpm" && !customerHasAccount(data.viewer.actor, data.graph)) {
+    return <CustomerAccountPending message="This is written once your account is in the session." />;
+  }
   return data.viewer.actor === "partner"
     ? <PartnerFundingRequest data={data} />
     : <VendorFundingReview data={data} />;

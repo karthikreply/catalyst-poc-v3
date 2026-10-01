@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   BadgeDollarSign,
   Boxes,
+  CalendarDays,
   ChartNoAxesCombined,
   ChevronDown,
   CircleHelp,
@@ -13,12 +14,13 @@ import {
 } from "lucide-react";
 
 import { type Actor } from "@/lib/seed";
-import { breadcrumbForPath, isBrandFlowPath, navItemsForActor } from "@/lib/vendor-shell";
+import { breadcrumbForPath, isBrandFlowPath, navItemsForActor, type VendorNavItem } from "@/lib/vendor-shell";
 import { BrandFlowFrame } from "./brand-flow-frame";
 import { useSession } from "./session-provider";
 
-const navIcons = {
+const navIcons: Record<VendorNavItem["label"], typeof LayoutDashboard> = {
   Dashboard: LayoutDashboard,
+  "My sessions": CalendarDays,
   Programs: Boxes,
   "Value sessions": Presentation,
   Funding: BadgeDollarSign,
@@ -37,7 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   function onViewerChange(next: Actor) {
     setActor(next);
     // This dropdown is the only control that navigates when the viewer changes.
-    router.push(next === "cpm" ? "/customer" : "/");
+    router.push(next === "cpm" ? "/customer" : "/sessions");
   }
 
   return (
